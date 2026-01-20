@@ -1,0 +1,12 @@
+{
+  "name": "tierralive-firmware",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Firmware for TierraLive devices",
+  "license": "GPL-3.0-or-later",
+  "scripts": {
+    "compile": "bash ./scripts/compile.sh",
+    "ci": "npm run compile",
+    "semantic-release": "npx --package semantic-release --package @semantic-release/changelog --package @semantic-release/git --package @semantic-release/github --package @semantic-release/npm semantic-release"
+  }
+}
