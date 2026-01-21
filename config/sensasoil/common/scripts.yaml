@@ -1,0 +1,405 @@
+script:
+  - id: main_script
+    then:
+      - logger.log:
+          format: "Main script called with ESP reset reason %d"
+          args: ['esp_reset_reason()']
+      - script.execute: refresh_sensors_script
+      - script.wait: refresh_sensors_script
+      - if:
+          condition:
+            - lambda: ! return esp_reset_reason() == ESP_RST_UNKNOWN || esp_reset_reason() == ESP_RST_POWERON || esp_reset_reason() == ESP_RST_USB || esp_reset_reason() == ESP_RST_JTAG;
+          then:
+            # Start BLE server if waked up by power on
+            - script.execute: execute_ble_server
+            - script.wait: execute_ble_server
+      - lambda: ! id(last_exec_error) = ${ERROR_NO};
+      - script.execute: safe_send_to_deep_sleep
+
+  - id: refresh_sensors_script
+    then:
+      - logger.log: "Refresh sensor data"
+      # Turn on peripheral power if not already
+      - if:
+          condition:
+            switch.is_off: power_peripherals
+          then:
+            - switch.turn_on: power_peripherals
+      # Publish state for firmware and hardware versions only once
+      - if:
+          condition:
+            lambda: ! return id(mqtt_initial_connection);
+          then:
+            - text_sensor.template.publish:
+                id: firmware_version
+                state: "${FIRMWARE_VERSION}"
+            - text_sensor.template.publish:
+                id: hardware_version
+                state: "${HARDWARE_VERSION}"
+      # Publish state of non-peripherals
+      - sensor.template.publish:
+          id: current_state
+          state: !lambda |-
+                switch (esp_reset_reason()) {
+                case ESP_RST_PANIC:
+                return ${SENSASOIL_STATE_ERROR_PANIC};
+                case ESP_RST_INT_WDT:
+                case ESP_RST_TASK_WDT:
+                case ESP_RST_WDT:
+                return ${SENSASOIL_STATE_ERROR_WDT};
+                case ESP_RST_BROWNOUT:
+                return ${SENSASOIL_STATE_ERROR_BROWNOUT};
+                case ESP_RST_EFUSE:
+                return ${SENSASOIL_STATE_ERROR_EFUSE};
+                case ESP_RST_PWR_GLITCH:
+                return ${SENSASOIL_STATE_ERROR_PWR_GLITCH};
+                case ESP_RST_CPU_LOCKUP:
+                return ${SENSASOIL_STATE_ERROR_CPU_LOCKUP};
+                default:
+                break;
+                }
+                switch (id(last_exec_error)) {
+                case ${ERROR_WIFI}:
+                return ${SENSASOIL_STATE_ERROR_WIFI};
+                case ${ERROR_MQTT}:
+                return ${SENSASOIL_STATE_ERROR_MQTT};
+                default:
+                return ${SENSASOIL_STATE_TX_DATA};
+                }
+      - binary_sensor.template.publish:
+          id: is_battery_charging
+          state: !lambda return id(is_charging_internal).state;
+      - component.update: chip_temperature
+      - delay: 1ms
+      - component.update: wifi_signal_db
+      - component.update: battery_v
+      - delay: 1ms
+      - component.update: battery_percentage
+      # Update time to sleep based on battery level
+      - component.update: deep_sleep_duration
+      # Wait 150ms since power_peripherals_time
+      - if:
+          condition:
+            lambda: !lambda return 150 > (millis() - id(power_peripherals_time));
+          then:
+            - delay: !lambda return 150 - (millis() - id(power_peripherals_time));
+      # Update peripherals voltage sensors
+      - component.update: soil_temperature_v
+      - delay: 1ms
+      - component.update: temperature_humidity_sensor
+      - delay: 1ms
+      - component.update: soil_volumetric_water_v
+      - delay: 1ms
+      # Turn off peripheral power
+      - switch.turn_off: power_peripherals
+      # Update template sensors based on the voltage
+      - component.update: soil_volumetric_water
+      - component.update: soil_temperature
+      # Update last update timestamp
+      - text_sensor.template.publish:
+          id: last_update_id
+          state: !lambda return std::to_string(millis());
+
+
+  - id: send_to_deep_sleep_
+    then:
+      - deep_sleep.enter:
+          id: deep_sleep_1
+          # sleep_duration: !lambda return id(deep_sleep_duration).state * 1000 * 60;
+          sleep_duration: 5s
+
+  - id: safe_send_to_deep_sleep
+    then:
+      - if:
+          condition:
+            - switch.is_off: prevent_deep_sleep
+          then:
+            - logger.log: 'Sending to safe deep sleep'
+            # TODO: Change and just wait for the publish callback
+            # Listen to the final state being published
+            - lambda: |-
+                id(mqtt_id).subscribe(id(mqtt_id).get_topic_prefix() + "/sensor/current_state/state", [=](const std::string &topic, const std::string &payload) {
+                    if (payload != "${SENSASOIL_STATE_DEEP_SLEEP}") return;
+                    id(send_to_deep_sleep_)->execute();
+                }, 1);
+            - sensor.template.publish:
+                id: current_state
+                state: ${SENSASOIL_STATE_DEEP_SLEEP}
+            # If the message is not received in time, reset
+            - script.execute: send_to_error_deep_sleep_after_timeout
+            - script.wait: send_to_error_deep_sleep_after_timeout
+
+  - id: on_wifi_disconnect
+    then:
+      # Skip disconnect script if configuring the Wi-Fi
+      - if:
+          condition:
+            - lambda: ! return id(device_setup_state) == ${SETUP_STATE_WIFI_CONFIG};
+          then:
+            - script.stop: on_wifi_disconnect
+      - logger.log: "Handling Wi-Fi disconnect event"
+      - switch.turn_on: prevent_deep_sleep
+      - script.stop: execute_ble_server
+      - script.stop: on_mqtt_disconnect
+      # Open BLE connection for setup
+      - ble.enable
+      - wait_until:
+          ble.enabled
+      # Display LED status
+      - light.turn_on: led_status
+      - light.control: 
+          id: led_status
+          effect: "wifi_disconnect_effect"
+      # Start error sleep timeout if the error comes after a sleep
+      - if:
+          condition:
+            - lambda: ! return esp_sleep_get_wakeup_cause() == ESP_SLEEP_WAKEUP_TIMER;
+          then:
+            - script.execute: send_to_error_deep_sleep_after_timeout
+      - switch.turn_off: prevent_deep_sleep
+      - lambda: ! id(last_exec_error) = ${ERROR_WIFI};
+      # Wait for WiFi to be connected
+      - wait_until:
+          wifi.connected
+      # Housekeeping
+      - script.stop: send_to_error_deep_sleep_after_timeout
+      - light.turn_off: led_status
+      # Call main execution
+      - script.execute: main_script
+
+  - id: on_mqtt_disconnect
+    # TODO: Do not start BLE, it will waste energy, same for WiFi
+    then:
+      # Skip disconnect script if configuring the MQTT
+      - if:
+          condition:
+            - lambda: ! return id(device_setup_state) == ${SETUP_STATE_MQTT_CONFIG} || id(device_setup_state) == ${SETUP_STATE_WIFI_CONFIG};
+          then:
+            - script.stop: on_mqtt_disconnect
+      - logger.log: "Handling MQTT disconnect event"
+      - switch.turn_on: prevent_deep_sleep
+      - script.wait: on_wifi_disconnect
+      - script.stop: execute_ble_server
+      # Open BLE connection for setup
+      - ble.enable
+      - wait_until:
+          ble.enabled
+      # Display LED status
+      - light.turn_on: led_status
+      - light.control: 
+          id: led_status
+          effect: "mqtt_disconnect_effect"
+      # Start error sleep timeout if the error comes after a sleep
+      - if:
+          condition:
+            - lambda: ! return esp_sleep_get_wakeup_cause() == ESP_SLEEP_WAKEUP_TIMER;
+          then:
+            - script.execute: send_to_error_deep_sleep_after_timeout
+      - switch.turn_off: prevent_deep_sleep
+      - lambda: ! id(last_exec_error) = ${ERROR_MQTT};
+      # Wait for MQTT to be connected
+      - wait_until:
+          mqtt.connected
+      # Log
+      # Housekeeping
+      - script.stop: send_to_error_deep_sleep_after_timeout
+      - light.turn_off: led_status
+      # Call main execution
+      - script.execute: main_script
+
+  - id: execute_ble_server
+    then:
+      - logger.log: "Starting BLE server"
+      - lambda: ! id(improv_state) = improv::STATE_AUTHORIZED;
+      # Turn on BLE
+      - ble.enable
+      - wait_until:
+          ble.enabled
+      # Display LED status
+      - sensor.template.publish:
+          id: current_state
+          state: ${SENSASOIL_STATE_BLE_SERVER}
+      - light.turn_on: led_status
+      - light.control: 
+          id: led_status
+          effect: "manual_ble_server_effect"
+      # Reset last BLE communication
+      - lambda: ! id(last_ble_communication_timestamp) = millis();
+      # If the last communication was more than 5 minutes ago, close the server
+      - wait_until:
+          lambda: ! return millis() - id(last_ble_communication_timestamp) >= 5 * 60 * 1000;
+      - light.turn_off: led_status
+
+  - id: send_to_error_deep_sleep_after_timeout
+    then:
+      # Send to sleep after a delay
+      # Used to avoid wasting 15mins trying to connect to MQTT or WiFi
+      - delay: 1min
+      - deep_sleep.enter:
+          id: deep_sleep_1
+          sleep_duration: 5min
+
+  - id: ota_update
+    then:
+      - logger.log: "Performing OTA update"
+      - switch.turn_on: prevent_deep_sleep
+      # Get the OTA URL
+      - lambda: |-
+            id(mqtt_id).subscribe("${MQTT_PREFIX}/f/u", [=](const std::string &topic, const std::string &payload) {
+              id(ota_url) = payload;
+            }, 1);
+      # Wait until the OTA URL is defined
+      - wait_until:
+        - lambda: ! return !id(ota_url).empty();
+      # Call OTA HTTP update
+      - ota.http_request.flash:
+          url: !lambda return id(ota_url) + "?h=${HARDWARE_VERSION}&ex=bin";
+          md5_url: !lambda return id(ota_url) + "?h=${HARDWARE_VERSION}&ex=md5";
+
+  - id: mqtt_setup
+    then:
+      - logger.log: "MQTT setup"
+      # Setup MQTT connection
+      - lambda: |-
+          uint8_t mac[6];
+          get_mac_address_raw(mac);
+          std::string mac_base64 = base64_encode(mac, 6);
+          // Convert to base64URL
+          for (char &c : mac_base64) {
+              if (c == '+') c = '-';
+              else if (c == '/') c = '_';
+          }
+          id(mqtt_id).set_topic_prefix("${MQTT_PREFIX}/" + mac_base64, "");
+          id(mqtt_id).set_broker_address(id(mqtt_broker_address));
+          id(mqtt_id).set_broker_port(id(mqtt_broker_port));
+          id(mqtt_id).set_username(id(mqtt_username));
+          id(mqtt_id).set_password(id(mqtt_password));
+          if (!id(mqtt_discovery_required)) { id(mqtt_id).disable_discovery(); }
+      # These subscriptions are here so they have priority over all other subscriptions
+      # Avoid sending discovery messages on every startup if already present
+      # TODO: Subscribe before startup, but publish afterwards
+      - if:
+          condition:
+            - lambda: ! return id(mqtt_discovery_required);
+          then:
+            - mqtt.publish:
+                topic: !lambda return id(mqtt_id).get_topic_prefix() + "/d";
+                qos: 1
+                payload: "1"
+                retain: True
+            - lambda: |-
+                id(mqtt_discovery_required) = false;
+                id(mqtt_initial_connection) = true;
+          else:
+            - lambda: |-
+                id(mqtt_discovery_required) = true; // By default discovery is required until a message is received
+                id(mqtt_id).subscribe(id(mqtt_id).get_topic_prefix() + "/d", [=](const std::string &topic, const std::string &payload) {
+                    id(mqtt_discovery_required) = payload != "1";
+                }, 1);
+      # Check for OTA
+      - lambda: |-
+          id(mqtt_id).subscribe("${MQTT_PREFIX}/f/${HARDWARE_VERSION}", [=](const std::string &topic, const std::string &payload) {
+              if (payload.compare("${FIRMWARE_VERSION}") != 0) {
+                id(ota_update)->execute();
+              }
+          }, 1);
+      - mqtt.enable
+      - wait_until: mqtt.connected
+
+  - id: improv_wifi_configure
+    parameters:
+      ssid: std::string
+      password: std::string
+    then:
+      - lambda: ! id(device_setup_state) = ${SETUP_STATE_WIFI_CONFIG};
+      - wifi.configure:
+          ssid: !lambda return ssid;
+          password: !lambda return password;
+          save: true
+          timeout: 30000ms
+          on_connect:
+            - lambda: |-
+                id(device_setup_state) = ${SETUP_STATE_INIT};
+                id(improv_state) = improv::STATE_PROVISIONED;
+                id(improv_status_characteristic)->notify();
+          on_error:
+            - lambda: |-
+                id(device_setup_state) = ${SETUP_STATE_INIT};
+                id(improv_error_characteristic)->set_value(improv::ERROR_UNABLE_TO_CONNECT);
+                id(improv_error_characteristic)->notify();
+                id(improv_state) = improv::ERROR_UNABLE_TO_CONNECT;
+                id(improv_status_characteristic)->notify();
+
+  - id: improv_mqtt_configure
+    parameters:
+      new_mqtt_broker_address: std::string
+      new_mqtt_broker_port: uint16_t
+      new_mqtt_username: std::string
+      new_mqtt_password: std::string
+    then:
+      - script.stop: mqtt_setup
+      - mqtt.disable
+      - wait_until:
+        - not: mqtt.connected
+      - lambda: |-
+          id(device_setup_state) = ${SETUP_STATE_MQTT_CONFIG};
+          id(improv_mqtt_configure_error_timeout)->execute(id(mqtt_broker_address), id(mqtt_broker_port), id(mqtt_username), id(mqtt_password));
+          id(mqtt_broker_address) = new_mqtt_broker_address;
+          id(mqtt_broker_port) = new_mqtt_broker_port;
+          id(mqtt_username) = new_mqtt_username;
+          id(mqtt_password) = new_mqtt_password;
+      - script.execute: mqtt_setup
+      - script.wait: mqtt_setup
+      - script.stop: improv_mqtt_configure_error_timeout
+      - lambda: |-
+          id(device_setup_state) = ${SETUP_STATE_INIT};
+          id(improv_state) = improv::STATE_PROVISIONED;
+          id(improv_status_characteristic)->notify();
+
+  - id: improv_mqtt_configure_error_timeout
+    parameters:
+      old_mqtt_broker_address: std::string
+      old_mqtt_broker_port: uint16_t
+      old_mqtt_username: std::string
+      old_mqtt_password: std::string
+    then:
+      - delay: 5min
+      - script.stop: improv_mqtt_configure
+      - script.stop: mqtt_setup
+      - lambda: |-
+          id(device_setup_state) = ${SETUP_STATE_INIT};
+          id(improv_error_characteristic)->set_value(improv::ERROR_UNABLE_TO_CONNECT);
+          id(improv_error_characteristic)->notify();
+          id(improv_state) = improv::ERROR_UNABLE_TO_CONNECT;
+          id(improv_status_characteristic)->notify();
+          id(mqtt_broker_address) = old_mqtt_broker_address;
+          id(mqtt_broker_port) = old_mqtt_broker_port;
+          id(mqtt_username) = old_mqtt_username;
+          id(mqtt_password) = old_mqtt_password;
+      - script.execute: mqtt_setup
+
+  - id: improv_wifi_mqtt_show_config
+    then:
+      - lambda: |-
+          std::string mqtt_port_str(sizeof(uint16_t), 0);
+          mqtt_port_str[0] = static_cast<char>(id(mqtt_broker_port) & 0xFF);
+          mqtt_port_str[1] = static_cast<char>((id(mqtt_broker_port) >> 8) & 0xFF);
+          std::vector<std::string> response = {
+              {${E_IMPROV_MQTT_VIEW_SETTINGS_COMMAND_ID}},                                    
+              id(mqtt_broker_address),
+              mqtt_port_str,
+              id(mqtt_username)
+          };
+          id(improv_rpc_result)->set_value(improv::build_rpc_response(improv::CUSTOM, response, true));
+          id(improv_rpc_result)->notify();
+
+  - id: improv_wifi_ble_show_config
+    then:
+      - lambda: |-
+          std::string ssid = id(wificomponent)->get_sta().get_ssid();
+          std::vector<std::string> response = {
+              {${E_IMPROV_WIFI_VIEW_SETTINGS_COMMAND_ID}},                                    
+              ssid
+          };
+          id(improv_rpc_result)->set_value(improv::build_rpc_response(improv::CUSTOM, response, true));
+          id(improv_rpc_result)->notify();

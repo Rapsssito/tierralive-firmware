@@ -1,0 +1,159 @@
+sensor:
+  - platform: wifi_signal
+    name: "WiFi signal"
+    id: wifi_signal_db
+    update_interval: never
+    qos: 1
+    subscribe_qos: 1
+    state_class: measurement
+    entity_category: "diagnostic"
+    device_class: signal_strength
+  - platform: internal_temperature
+    id: chip_temperature
+    name: "Chip temperature"
+    update_interval: never
+    device_class: TEMPERATURE
+    qos: 1
+    subscribe_qos: 1
+    state_class: measurement
+    entity_category: "diagnostic"
+  - platform: dht
+    pin: GPIO5
+    model: DHT22
+    id: temperature_humidity_sensor
+    update_interval: never
+    temperature:
+      name: "Ambient temperature"
+      id: ambient_temperature
+      state_class: measurement
+      device_class: TEMPERATURE
+      qos: 1
+      subscribe_qos: 1
+    humidity:
+      name: "Ambient humidity"
+      id: ambient_humidity
+      device_class: HUMIDITY
+      state_class: measurement
+      qos: 1
+      subscribe_qos: 1
+  - platform: adc
+    id: battery_v
+    pin: GPIO3
+    name: "Battery voltage"
+    attenuation: 12db
+    unit_of_measurement: "V"
+    entity_category: "diagnostic"
+    update_interval: never
+    samples: 20
+    filters:
+    - calibrate_linear:
+          - 1.91 -> 3.3
+          - 2.40 -> 4.2
+    qos: 1
+    subscribe_qos: 1
+    state_class: measurement
+  - platform: template
+    id: battery_percentage
+    name: "Battery percentage"
+    unit_of_measurement: "%"
+    state_class: measurement
+    device_class: BATTERY
+    icon: mdi:battery
+    update_interval: never
+    qos: 1
+    subscribe_qos: 1
+    lambda: ! return id(battery_v).state;
+    filters:
+    - calibrate_linear:
+        - 3.3 -> 0.00
+        - 4.2 -> 100.00
+    - clamp:
+        min_value: 0
+        max_value: 100
+    on_value:
+      then:
+        - if:
+            condition:
+              - ble.enabled
+            then:
+              - ble_server.characteristic.notify:
+                  id: ble_battery_level_char
+              - ble_server.characteristic.notify:
+                  id: ble_battery_status_char
+  - platform: adc
+    id: soil_temperature_v
+    pin: GPIO1
+    name: "Soil temperature voltage"
+    attenuation: 12db
+    unit_of_measurement: "V"
+    entity_category: "diagnostic"
+    update_interval: never
+    samples: 20
+    qos: 1
+    subscribe_qos: 1
+    state_class: measurement
+  - platform: template
+    id: soil_temperature
+    name: "Soil temperature"
+    icon: mdi:thermometer-probe
+    update_interval: never
+    qos: 1
+    subscribe_qos: 1
+    unit_of_measurement: "°C"
+    device_class: TEMPERATURE
+    state_class: measurement
+    lambda: ! return id(soil_temperature_v).state;
+    filters:
+    - lambda: return 298.15 / (1 + 298.15 / 4050 * log(3.3 / x - 1)) - 273.15;
+  - platform: adc
+    id: soil_volumetric_water_v
+    pin: GPIO4
+    name: "Soil volumetric water voltage"
+    attenuation: 12db
+    unit_of_measurement: "V"
+    entity_category: "diagnostic"
+    update_interval: never
+    samples: 20
+    qos: 1
+    subscribe_qos: 1
+    state_class: measurement
+  - platform: template
+    id: soil_volumetric_water
+    name: "Soil volumetric water"
+    icon: mdi:water-percent
+    update_interval: never
+    qos: 1
+    subscribe_qos: 1
+    unit_of_measurement: "%"
+    device_class: MOISTURE
+    state_class: measurement
+    lambda: ! return id(soil_volumetric_water_v).state;
+    filters:
+    - lambda: return 778 * exp(-2.51 * x);
+    - clamp:
+        min_value: 0
+        max_value: 100
+  - platform: template
+    id: deep_sleep_duration
+    name: "Deep sleep duration"
+    entity_category: "diagnostic"
+    icon: mdi:clock-outline
+    update_interval: never
+    state_class: measurement
+    qos: 1
+    subscribe_qos: 1
+    unit_of_measurement: minutes
+    lambda: ! return id(battery_percentage).state;
+    filters:
+    - calibrate_linear:
+        - 0.00 -> 60 # 1h
+        - 100.00 -> 15 # 15min
+  - platform: template
+    id: current_state
+    name: "Current state"
+    icon: mdi:state-machine
+    qos: 1
+    subscribe_qos: 1
+    update_interval: never
+    entity_category: "diagnostic"
+    accuracy_decimals: 0

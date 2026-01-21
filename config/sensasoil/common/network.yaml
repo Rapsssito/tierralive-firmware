@@ -1,0 +1,38 @@
+mqtt:
+  id: mqtt_id
+  broker: "127.0.0.1"  # Configured by globals
+  username: "u"  # Configured by globals
+  password: "p"  # Configured by globals
+  keepalive: 5min
+  # clean_session: RTC
+  enable_on_boot: False
+  discover_ip: False
+  discovery_unique_id_generator: mac
+  on_disconnect:
+    - script.execute: on_mqtt_disconnect
+  # This makes Home Assistant always show a status (instead of "unavailable")
+  birth_message:
+  will_message:
+  # No need for shutdown message
+  shutdown_message:
+  # No need for MQTT logs
+  log_topic: null
+
+http_request:
+  useragent: SensaSoil_${HARDWARE_VERSION}/${FIRMWARE_VERSION}
+
+ota:
+  - platform: esphome
+    password: "e35c052131kbccczbdd6e25434016cda1f"
+  - platform: http_request
+    on_end:
+      - lambda: ! id(mqtt_discovery_required) = true;
+    on_error:
+      - switch.turn_off: prevent_deep_sleep
+      - script.execute: main_script
+
+wifi:
+  id: wificomponent
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+  fast_connect: True

@@ -1,0 +1,25 @@
+text_sensor:
+  - platform: template
+    id: firmware_version
+    name: "Firmware version"
+    icon: mdi:chip
+    qos: 1
+    subscribe_qos: 1
+    update_interval: never
+    entity_category: "diagnostic"
+  - platform: template
+    id: hardware_version
+    name: "Hardware version"
+    icon: mdi:memory
+    qos: 1
+    subscribe_qos: 1
+    update_interval: never
+    entity_category: "diagnostic"
+  - platform: template
+    id: last_update_id
+    name: "Last update ID"
+    icon: mdi:message-badge
+    qos: 1
+    subscribe_qos: 1
+    update_interval: never
+    entity_category: "diagnostic"

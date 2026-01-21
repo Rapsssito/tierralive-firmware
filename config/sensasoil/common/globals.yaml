@@ -1,0 +1,55 @@
+globals:
+  # CONFIGURABLE BY THE USER #
+  - id: mqtt_broker_address
+    type: std::string
+    restore_value: yes
+    max_restore_data_length: 254
+    initial_value: '"${MQTT_DEFAULT_ADDRESS}"'
+  - id: mqtt_broker_port
+    type: uint16_t
+    restore_value: yes
+    initial_value: ${MQTT_DEFAULT_PORT}
+  - id: mqtt_username
+    type: std::string
+    restore_value: yes
+    max_restore_data_length: 254
+    initial_value: '"admin"'
+  - id: mqtt_password
+    type: std::string
+    restore_value: yes
+    max_restore_data_length: 254
+    initial_value: '"admin"'
+  # INTERNAL #
+  - id: last_ble_communication_timestamp
+    type: unsigned long
+    restore_value: no
+    initial_value: "0"
+  - id: ota_url
+    type: std::string
+    restore_value: no
+  - id: mqtt_initial_connection
+    type: bool
+    restore_value: no
+    initial_value: "false"
+  - id: power_peripherals_time
+    type: unsigned long
+    restore_value: no
+    initial_value: "0"
+  - id: last_exec_error
+    type: uint8_t
+    restore_value: yes
+    initial_value: ${ERROR_NO}
+  - id: improv_buffer
+    type: std::vector<uint8_t>
+    restore_value: no
+  - id: improv_state
+    type: uint8_t
+    restore_value: no
+  - id: device_setup_state
+    type: uint8_t
+    restore_value: no
+    initial_value: ${SETUP_STATE_INIT}
+  - id: mqtt_discovery_required
+    type: bool
+    restore_value: yes
+    initial_value: "true"

@@ -1,0 +1,48 @@
+logger:
+  level: DEBUG
+
+esphome:
+  name: tierralive-sensasoil-debug
+  friendly_name: SensaSoil DEBUG
+  # name_add_mac_suffix: true
+  platformio_options:
+    board_build.flash_mode: dio # Required for ESP32-C3
+  min_version: '2025.8.0'
+  project: 
+    name: "tierralive.sensasoil"
+    version: "${FIRMWARE_VERSION}"
+  includes:
+    - "<improv.h>"
+  libraries:
+    - improv=https://github.com/rapsssito/extended-improv-sdk-cpp
+  on_boot:
+    - priority: 260
+      then:
+        # Wait 30s for WiFi connection
+        - delay: 30s
+        - if:
+            condition:
+              - not:
+                - wifi.connected
+            then:
+              - script.execute: on_wifi_disconnect
+    - priority: 190
+      then:
+        - script.execute: mqtt_setup
+    - priority: -100
+      then:
+        - script.wait: mqtt_setup
+        - script.execute: main_script
+
+esp32:
+  board: esp32-c3-devkitm-1
+  variant: ESP32C3
+  flash_size: "4MB"
+  framework:
+    type: esp-idf
+    sdkconfig_options:
+      CONFIG_COMPILER_OPTIMIZATION_SIZE: y
+      CONFIG_ESPTOOLPY_FLASHSIZE_4MB: y
+
+deep_sleep:
+  id: deep_sleep_1
