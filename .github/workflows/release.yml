@@ -1,8 +1,12 @@
-name: release
+name: 🏷️🚢 Release and publish new version
 
 on:
-  push:
-    branches: ["main"]
+  workflow_dispatch:
+
+env:
+  REGISTRY: ghcr.io
+  OWNER: ${{ github.repository_owner }}
+  HUSKY: 0
 
 permissions:
   contents: read # for checkout
@@ -10,7 +14,7 @@ permissions:
 jobs:
   release:
     name: Release
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-slim
     permissions:
       contents: write # to be able to publish a GitHub release
       issues: write # to be able to comment on released issues
@@ -21,13 +25,88 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: "lts/*"
+
+      - name: Install dependencies
+        run: npm ci
+
       - name: CI
-        run: npm run ci
-      - name: Release
+        run: npm run ci-checks
+      
+      - name: Create new version
+        id: version-step
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: npm run semantic-release
+        run: |
+          git config --global user.name "${{ github.actor }}"
+          git config --global user.email "${{ github.actor }}@users.noreply.github.com"
+
+          # Store the current commit hash before changes
+          echo "PREVIOUS_COMMIT=$(git rev-parse HEAD)" >> $GITHUB_OUTPUT
+
+          npm run new-version
+
+          # Store the new commit hash after changes
+          echo "NEW_COMMIT=$(git rev-parse HEAD)" >> $GITHUB_OUTPUT
+          echo "VERSION_CREATED=true" >> $GITHUB_OUTPUT
+
+      - name: Get packages changed
+        run: |
+          npm run --silent packages-changed > changed.json
+          cat changed.json
+
+      - name: Check if any packages changed
+        run: |
+          if [ ! -s changed.json ]; then
+            echo "No packages changed, exiting early."
+            exit 0
+          fi
+
+      - name: Compile firmware
+        run: npm run compile
+
+      - name: Upload firmware to the GitHub Releases
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # TODO
+  
+      # Rollback step that runs only on failure
+      - name: Rollback version changes
+        if: failure() && steps.version-step.outputs.VERSION_CREATED == 'true'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "Pipeline failed, rolling back version changes..."
+          
+          # Get the commit that will be reverted to identify tags to remove
+          NEW_COMMIT="${{ steps.version-step.outputs.NEW_COMMIT }}"
+          PREVIOUS_COMMIT="${{ steps.version-step.outputs.PREVIOUS_COMMIT }}"
+          
+          # Find and delete any tags pointing to the version commit
+          echo "Checking for tags to remove..."
+          TAGS_TO_DELETE=$(git tag --points-at $NEW_COMMIT)
+          
+          if [ -n "$TAGS_TO_DELETE" ]; then
+            echo "Found tags to delete: $TAGS_TO_DELETE"
+            for tag in $TAGS_TO_DELETE; do
+              echo "Deleting local tag: $tag"
+              git tag -d $tag
+              echo "Deleting remote tag: $tag"
+              git push origin :refs/tags/$tag || echo "Warning: Could not delete remote tag $tag"
+            done
+          else
+            echo "No tags found pointing to the version commit"
+          fi
+          
+          # Reset to the previous commit (before version bump)
+          git reset --hard $PREVIOUS_COMMIT
+          
+          # Force push to revert the version bump commit
+          git push --force-with-lease origin main
+          
+          echo "Version changes and tags have been rolled back successfully"

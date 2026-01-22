@@ -3,8 +3,8 @@ substitutions:
   MQTT_PREFIX: "ss"
   MQTT_DEFAULT_ADDRESS: "192.168.1.68"
   MQTT_DEFAULT_PORT: "1883"
-  # Versions for OTA
-  FIRMWARE_VERSION: "1.0.3"
+  # ESPHome minimum version (kept in sync with esphome.version)
+  ESPHOME_MIN_VERSION: !include ../../../../esphome.version
   # Public device states
   SENSASOIL_STATE_DEEP_SLEEP: "0"
   SENSASOIL_STATE_TX_DATA: "1"

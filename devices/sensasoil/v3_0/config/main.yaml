@@ -1,0 +1,14 @@
+packages:
+  sensasoil_common_substitutions: !include ../../common/config/substitutions.yaml
+  sensasoil_common_base: !include ../../common/config/base.yaml
+  sensasoil_common_network: !include ../../common/config/network.yaml
+  sensasoil_common_ble: !include ../../common/config/ble.yaml
+  sensasoil_common_globals: !include ../../common/config/globals.yaml
+  sensasoil_common_entities: !include ../../common/config/entities.yaml
+  sensasoil_common_scripts: !include ../../common/config/scripts.yaml
+  peripherals: !include peripherals.yaml
+  sensors: !include sensors.yaml
+
+substitutions:
+  HARDWARE_VERSION: "3.0"
+  FIRMWARE_VERSION: !env_var FIRMWARE_VERSION

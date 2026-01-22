@@ -1,12 +1,31 @@
 {
   "name": "tierralive-firmware",
-  "version": "0.0.0",
   "private": true,
+  "engines": {
+    "npm": ">=10.0.0",
+    "node": ">=22.0.0"
+  },
   "description": "Firmware for TierraLive devices",
   "license": "GPL-3.0-or-later",
   "scripts": {
-    "compile": "bash ./scripts/compile.sh",
-    "ci": "npm run compile",
-    "semantic-release": "npx --package semantic-release --package @semantic-release/changelog --package @semantic-release/git --package @semantic-release/github --package @semantic-release/npm semantic-release"
+    "compile": "bash ./scripts/compile_all.sh",
+    "ci-checks": "npm run compile",
+    "new-version": "lerna version --sync-workspace-lock --yes",
+    "new-version:preview": "lerna version --sync-workspace-lock --dry-run",
+    "packages-changed": "lerna changed --json --since HEAD~1",
+    "prepare": "husky || true",
+    "commitlint": "commitlint --edit"
+  },
+  "workspaces": [
+    "devices/**/*"
+  ],
+  "devDependencies": {
+    "@commitlint/cli": "19.8.1",
+    "@commitlint/config-conventional": "19.8.1",
+    "@lerna-lite/changed": "4.4.1",
+    "@lerna-lite/cli": "4.11.0",
+    "@lerna-lite/publish": "4.3.0",
+    "conventional-changelog-conventionalcommits": "9.0.0",
+    "husky": "9.1.7"
   }
 }

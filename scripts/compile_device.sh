@@ -2,24 +2,42 @@
 set -euo pipefail
 
 if [ $# -lt 2 ]; then
-	echo "Usage: $0 <DEVICE_CONF_NAME> <OUTPUT_PREFIX>" >&2
+	echo "Usage: $0 <DEVICE_CONF_PATH> <OUTPUT_PREFIX>" >&2
 	exit 1
 fi
 
-DEVICE_CONF_NAME="$1"
+DEVICE_CONF_PATH="$1"
 OUTPUT_PREFIX="$2"
 
 SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &> /dev/null && pwd)
 
 ESPHOME_VERSION=$(cat "${SCRIPT_DIR}/../esphome.version" | tr -d ' \n')
-CONFIG_BASE="${SCRIPT_DIR}/../config/${DEVICE_CONF_NAME}"
-CONFIG_FILE_DOCKER="/config/${DEVICE_CONF_NAME}/main.yaml"
+CONFIG_BASE="${SCRIPT_DIR}/../devices/${DEVICE_CONF_PATH}/config/"
+CONFIG_FILE_DOCKER="/config/devices/${DEVICE_CONF_PATH}/config/main.yaml"
+PACKAGE_JSON="${CONFIG_BASE}/../package.json"
+FIRMWARE_VERSION=""
+if [ -f "${PACKAGE_JSON}" ]; then
+	FIRMWARE_VERSION=$(python - "${PACKAGE_JSON}" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+path = Path(sys.argv[1])
+data = json.loads(path.read_text(encoding="utf-8"))
+print(data.get("version", ""))
+PY
+)
+fi
+if [ -z "${FIRMWARE_VERSION}" ]; then
+	echo "FIRMWARE_VERSION not found in ${PACKAGE_JSON}" >&2
+	exit 1
+fi
 
 if [[ "$(dirname "${OUTPUT_PREFIX}")" != "." ]]; then
 	mkdir -p "$(dirname "${OUTPUT_PREFIX}")"
 fi
 
-DOCKER_COMMAND="docker run --rm -v "${SCRIPT_DIR}/../config:/config" ghcr.io/esphome/esphome:"${ESPHOME_VERSION}""
+DOCKER_COMMAND="docker run --rm -e FIRMWARE_VERSION=${FIRMWARE_VERSION} -v "${SCRIPT_DIR}/../:/config" ghcr.io/esphome/esphome:"${ESPHOME_VERSION}""
 
 CONFIG_OUTPUT=$(${DOCKER_COMMAND} config "${CONFIG_FILE_DOCKER}")
 echo "${CONFIG_OUTPUT}" > "${OUTPUT_PREFIX}.esphome_config.yaml"
