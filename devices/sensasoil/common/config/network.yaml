@@ -33,6 +33,6 @@ ota:
 
 wifi:
   id: wificomponent
-  ssid: ""
-  password: ""
+  ssid: "ssid"
+  password: "password"
   fast_connect: True
