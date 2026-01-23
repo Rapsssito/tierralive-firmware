@@ -1,10 +1,7 @@
-logger:
-  level: DEBUG
-
 esphome:
-  name: tierralive-sensasoil-debug
-  friendly_name: SensaSoil DEBUG
-  # name_add_mac_suffix: true
+  name: "sensasoil_v${HARDWARE_VERSION_UNDERSCORE}"
+  friendly_name: "SensaSoil v${HARDWARE_VERSION}"
+  name_add_mac_suffix: true
   platformio_options:
     board_build.flash_mode: dio # Required for ESP32-C3
   min_version: "${ESPHOME_MIN_VERSION}"

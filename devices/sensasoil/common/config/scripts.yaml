@@ -1,9 +1,6 @@
 script:
   - id: main_script
     then:
-      - logger.log:
-          format: "Main script called with ESP reset reason %d"
-          args: ['esp_reset_reason()']
       - script.execute: refresh_sensors_script
       - script.wait: refresh_sensors_script
       - if:
@@ -18,7 +15,6 @@ script:
 
   - id: refresh_sensors_script
     then:
-      - logger.log: "Refresh sensor data"
       # Turn on peripheral power if not already
       - if:
           condition:
@@ -114,7 +110,6 @@ script:
           condition:
             - switch.is_off: prevent_deep_sleep
           then:
-            - logger.log: 'Sending to safe deep sleep'
             # TODO: Change and just wait for the publish callback
             # Listen to the final state being published
             - lambda: |-
@@ -137,7 +132,6 @@ script:
             - lambda: ! return id(device_setup_state) == ${SETUP_STATE_WIFI_CONFIG};
           then:
             - script.stop: on_wifi_disconnect
-      - logger.log: "Handling Wi-Fi disconnect event"
       - switch.turn_on: prevent_deep_sleep
       - script.stop: execute_ble_server
       - script.stop: on_mqtt_disconnect
@@ -176,7 +170,6 @@ script:
             - lambda: ! return id(device_setup_state) == ${SETUP_STATE_MQTT_CONFIG} || id(device_setup_state) == ${SETUP_STATE_WIFI_CONFIG};
           then:
             - script.stop: on_mqtt_disconnect
-      - logger.log: "Handling MQTT disconnect event"
       - switch.turn_on: prevent_deep_sleep
       - script.wait: on_wifi_disconnect
       - script.stop: execute_ble_server
@@ -209,7 +202,6 @@ script:
 
   - id: execute_ble_server
     then:
-      - logger.log: "Starting BLE server"
       - lambda: ! id(improv_state) = improv::STATE_AUTHORIZED;
       # Turn on BLE
       - ble.enable
@@ -241,7 +233,6 @@ script:
 
   - id: ota_update
     then:
-      - logger.log: "Performing OTA update"
       - switch.turn_on: prevent_deep_sleep
       # Get the OTA URL
       - lambda: |-
@@ -258,7 +249,6 @@ script:
 
   - id: mqtt_setup
     then:
-      - logger.log: "MQTT setup"
       # Setup MQTT connection
       - lambda: |-
           uint8_t mac[6];

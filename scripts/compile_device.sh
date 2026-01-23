@@ -63,14 +63,20 @@ COMPILE_OUTPUT=$(FIRMWARE_VERSION="${FIRMWARE_VERSION}" "${ESPHOME_BIN}" compile
 }
 
 OTA_BIN_PATH="${CONFIG_BASE}/.esphome/build/${DEVICE_NAME}/.pioenvs/${DEVICE_NAME}/firmware.ota.bin"
-OUTPUT_FIRMWARE_PATH="${OUTPUT_PREFIX}.bin"
-OUTPUT_MD5_PATH="${OUTPUT_PREFIX}.bin.md5"
+FACTORY_BIN_PATH="${CONFIG_BASE}/.esphome/build/${DEVICE_NAME}/.pioenvs/${DEVICE_NAME}/firmware.factory.bin"
+OUTPUT_OTA_FIRMWARE_PATH="${OUTPUT_PREFIX}.ota.bin"
+OUTPUT_OTA_MD5_PATH="${OUTPUT_PREFIX}.ota.bin.md5"
+OUTPUT_FACTORY_FIRMWARE_PATH="${OUTPUT_PREFIX}.factory.bin"
+OUTPUT_FACTORY_MD5_PATH="${OUTPUT_PREFIX}.factory.bin.md5"
 
-cp "${OTA_BIN_PATH}" "${OUTPUT_FIRMWARE_PATH}"
+cp "${OTA_BIN_PATH}" "${OUTPUT_OTA_FIRMWARE_PATH}"
+cp "${FACTORY_BIN_PATH}" "${OUTPUT_FACTORY_FIRMWARE_PATH}"
 
 # Calculate the md5 checksum
-MD5_CHECKSUM=$(md5sum "${OUTPUT_FIRMWARE_PATH}" | awk '{ print $1 }')
-echo "${MD5_CHECKSUM}" > "${OUTPUT_MD5_PATH}"
+md5sum "${OUTPUT_OTA_FIRMWARE_PATH}" | awk '{print $1}' > "${OUTPUT_OTA_MD5_PATH}"
+md5sum "${OUTPUT_FACTORY_FIRMWARE_PATH}" | awk '{print $1}' > "${OUTPUT_FACTORY_MD5_PATH}"
 
-echo "OTA firmware path: ${OUTPUT_FIRMWARE_PATH}"
-echo "OTA firmware MD5 path: ${OUTPUT_MD5_PATH}"
+echo "OTA firmware path: ${OUTPUT_OTA_FIRMWARE_PATH}"
+echo "OTA firmware MD5 path: ${OUTPUT_OTA_MD5_PATH}"
+echo "Factory firmware path: ${OUTPUT_FACTORY_FIRMWARE_PATH}"
+echo "Factory firmware MD5 path: ${OUTPUT_FACTORY_MD5_PATH}"
