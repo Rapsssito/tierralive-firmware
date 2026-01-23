@@ -9,6 +9,11 @@ fi
 DEVICE_CONF_PATH="$1"
 OUTPUT_PREFIX="$2"
 
+# Ensure output directory exists
+if [[ "$(dirname "${OUTPUT_PREFIX}")" != "." ]]; then
+	mkdir -p "$(dirname "${OUTPUT_PREFIX}")"
+fi
+
 SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &> /dev/null && pwd)
 ROOT_DIR="${SCRIPT_DIR}/.."
 
@@ -48,10 +53,6 @@ FIRMWARE_VERSION="${FIRMWARE_VERSION}" "${ESPHOME_BIN}" compile "${CONFIG_FILE}"
 OTA_BIN_PATH="${CONFIG_BASE}/.esphome/build/${DEVICE_NAME}/.pioenvs/${DEVICE_NAME}/firmware.ota.bin"
 OUTPUT_FIRMWARE_PATH="${OUTPUT_PREFIX}.bin"
 OUTPUT_MD5_PATH="${OUTPUT_PREFIX}.bin.md5"
-
-if [[ "$(dirname "${OUTPUT_PREFIX}")" != "." ]]; then
-	mkdir -p "$(dirname "${OUTPUT_PREFIX}")"
-fi
 
 cp "${OTA_BIN_PATH}" "${OUTPUT_FIRMWARE_PATH}"
 
