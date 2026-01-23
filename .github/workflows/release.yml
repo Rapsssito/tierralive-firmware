@@ -17,7 +17,7 @@ permissions:
 jobs:
   bump-version:
     name: Bump and Compile
-    runs-on: ubuntu-slim
+    runs-on: ubuntu-latest
     outputs:
       new_tags: ${{ steps.extract_tags.outputs.new_tags }}
     steps:
