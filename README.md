@@ -1,27 +1,14 @@
-# Project Aqua ESPHome
-
-ESPHome configuration and tooling for the Project Aqua IoT device.
+# TierraLive Firmware
 
 ## Folder structure
 
 ```
-.github/workflows/   # CI + release automation
-config/              # ESPHome YAML configs
-  secrets.yaml       # (local, gitignored)
-  secrets.yaml.example
+devices/            # Device configurations
+  <device_name>/      # Device folder
+    v<version>/       # Device version folder
+      config/        # ESPHome configuration files
+        main.yaml    # Main ESPHome configuration
+      package.json   # Device package info
 esphome.version       # ESPHome image tag
-scripts/             # helper scripts (docker-based)
+scripts/             # helper scripts
 ```
-
-## Quick start
-
-1. Copy secrets template:
-   - `cp config/secrets.yaml.example config/secrets.yaml`
-2. Run ESPHome:
-   - `scripts/run.sh livingroom.yaml`
-
-## Release process
-
-This repo uses Conventional Commits and semantic-release.
-- Commit format: `feat:`, `fix:`, `chore:`, etc.
-- Releases are generated automatically on pushes to `main`.

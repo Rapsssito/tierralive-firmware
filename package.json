@@ -10,6 +10,7 @@
   "scripts": {
     "compile-device": "bash ./scripts/compile_device.sh",
     "compile-all": "bash ./scripts/compile_all.sh",
+    "setup-esphome": "bash ./scripts/setup_esphome.sh",
     "ci-checks": "npm run compile-all",
     "new-version": "lerna version --sync-workspace-lock --yes",
     "new-version:preview": "lerna version --sync-workspace-lock --dry-run",

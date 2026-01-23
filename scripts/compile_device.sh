@@ -10,14 +10,14 @@ DEVICE_CONF_PATH="$1"
 OUTPUT_PREFIX="$2"
 
 SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &> /dev/null && pwd)
+ROOT_DIR="${SCRIPT_DIR}/.."
 
-ESPHOME_VERSION=$(cat "${SCRIPT_DIR}/../esphome.version" | tr -d ' \n')
-CONFIG_BASE="${SCRIPT_DIR}/../devices/${DEVICE_CONF_PATH}/config/"
-CONFIG_FILE_DOCKER="/config/devices/${DEVICE_CONF_PATH}/config/main.yaml"
+CONFIG_BASE="${ROOT_DIR}/devices/${DEVICE_CONF_PATH}/config/"
+CONFIG_FILE="${CONFIG_BASE}/main.yaml"
 PACKAGE_JSON="${CONFIG_BASE}/../package.json"
 FIRMWARE_VERSION=""
 if [ -f "${PACKAGE_JSON}" ]; then
-	FIRMWARE_VERSION=$(python - "${PACKAGE_JSON}" <<'PY'
+	FIRMWARE_VERSION=$(python3 - "${PACKAGE_JSON}" <<'PY'
 import json
 import sys
 from pathlib import Path
@@ -33,13 +33,9 @@ if [ -z "${FIRMWARE_VERSION}" ]; then
 	exit 1
 fi
 
-if [[ "$(dirname "${OUTPUT_PREFIX}")" != "." ]]; then
-	mkdir -p "$(dirname "${OUTPUT_PREFIX}")"
-fi
+ESPHOME_BIN="esphome"
 
-DOCKER_COMMAND="docker run --rm -e FIRMWARE_VERSION=${FIRMWARE_VERSION} -v "${SCRIPT_DIR}/../:/config" ghcr.io/esphome/esphome:"${ESPHOME_VERSION}""
-
-CONFIG_OUTPUT=$(${DOCKER_COMMAND} config "${CONFIG_FILE_DOCKER}")
+CONFIG_OUTPUT=$(FIRMWARE_VERSION="${FIRMWARE_VERSION}" "${ESPHOME_BIN}" config "${CONFIG_FILE}")
 echo "${CONFIG_OUTPUT}" > "${OUTPUT_PREFIX}.esphome_config.yaml"
 DEVICE_NAME=$(awk '/^esphome:/{f=1;next} f && /^[[:space:]]*name:[[:space:]]*/{gsub(/^[[:space:]]*name:[[:space:]]*/, "", $0); print $0; exit}' <<< "${CONFIG_OUTPUT}")
 if [ -z "${DEVICE_NAME}" ]; then
@@ -47,11 +43,15 @@ if [ -z "${DEVICE_NAME}" ]; then
 	exit 1
 fi
 
-${DOCKER_COMMAND} compile "${CONFIG_FILE_DOCKER}"
+FIRMWARE_VERSION="${FIRMWARE_VERSION}" "${ESPHOME_BIN}" compile "${CONFIG_FILE}"
 
 OTA_BIN_PATH="${CONFIG_BASE}/.esphome/build/${DEVICE_NAME}/.pioenvs/${DEVICE_NAME}/firmware.ota.bin"
 OUTPUT_FIRMWARE_PATH="${OUTPUT_PREFIX}.bin"
 OUTPUT_MD5_PATH="${OUTPUT_PREFIX}.bin.md5"
+
+if [[ "$(dirname "${OUTPUT_PREFIX}")" != "." ]]; then
+	mkdir -p "$(dirname "${OUTPUT_PREFIX}")"
+fi
 
 cp "${OTA_BIN_PATH}" "${OUTPUT_FIRMWARE_PATH}"
 

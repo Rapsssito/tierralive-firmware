@@ -1,4 +1,5 @@
 node_modules/
+.venv/
 .esphome
 secrets.yaml
 dist/
