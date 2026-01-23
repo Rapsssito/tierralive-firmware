@@ -1,4 +1,4 @@
-name: 🏷️🚢 Release and publish new version
+name: 🏷️ Release and publish new version
 
 on:
   workflow_dispatch:
@@ -9,21 +9,69 @@ env:
   HUSKY: 0
 
 permissions:
-  contents: read # for checkout
+  contents: write
+  issues: write
+  pull-requests: write
+  id-token: write
 
 jobs:
-  release:
-    name: Release
+  bump-version:
+    name: Bump Version
     runs-on: ubuntu-slim
-    permissions:
-      contents: write # to be able to publish a GitHub release
-      issues: write # to be able to comment on released issues
-      pull-requests: write # to be able to comment on released pull requests
-      id-token: write # to enable use of OIDC for trusted publishing and npm provenance
+    outputs:
+      new_tags: ${{ steps.extract_tags.outputs.new_tags }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "lts/*"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: CI Checks
+        run: npm run ci-checks
+      
+      - name: Create new version
+        id: version-step
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          git config --global user.name "${{ github.actor }}"
+          git config --global user.email "${{ github.actor }}@users.noreply.github.com"
+          
+          npm run new-version
+
+      - name: Extract Created Tags
+        id: extract_tags
+        run: |
+          TAGS=$(git tag --points-at HEAD | jq -R -s -c 'split("\n")[:-1]')
+          echo "Found tags: $TAGS"
+          echo "new_tags=$TAGS" >> $GITHUB_OUTPUT
+
+  publish-assets:
+    name: Publish Assets
+    needs: bump-version
+    # Only run if tags were actually created
+    if: ${{ needs.bump-version.outputs.new_tags != '[]' && needs.bump-version.outputs.new_tags != '' }}
+    runs-on: ubuntu-slim
+    strategy:
+      matrix:
+        tag: ${{ fromJson(needs.bump-version.outputs.new_tags) }}
+      fail-fast: false
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ matrix.tag }}
           fetch-depth: 0
 
       - name: Setup Node.js
@@ -34,79 +82,50 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: CI
-        run: npm run ci-checks
-      
-      - name: Create new version
-        id: version-step
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Compile artifact
+        id: artifacts
         run: |
-          git config --global user.name "${{ github.actor }}"
-          git config --global user.email "${{ github.actor }}@users.noreply.github.com"
+          TAG="${{ matrix.tag }}"
 
-          # Store the current commit hash before changes
-          echo "PREVIOUS_COMMIT=$(git rev-parse HEAD)" >> $GITHUB_OUTPUT
+          # Extract package name from tag (e.g., @tierralive-firmware/sensasoil_v3_0@0.0.1 -> @tierralive-firmware/sensasoil_v3_0)
+          PKG_NAME=${TAG%@*}
+          echo "Package Name: $PKG_NAME"
 
-          npm run new-version
+          # Find package location
+          PKG_PATH=$(npm run --silent list-packages | jq -r --arg pkg "$PKG_NAME" '.[] | select(.name == $pkg) | .location')
 
-          # Store the new commit hash after changes
-          echo "NEW_COMMIT=$(git rev-parse HEAD)" >> $GITHUB_OUTPUT
-          echo "VERSION_CREATED=true" >> $GITHUB_OUTPUT
-
-      - name: Get packages changed
-        run: |
-          npm run --silent packages-changed > changed.json
-          cat changed.json
-
-      - name: Check if any packages changed
-        run: |
-          if [ ! -s changed.json ]; then
-            echo "No packages changed, exiting early."
-            exit 0
+          if [ -z "$PKG_PATH" ] || [ "$PKG_PATH" == "null" ]; then
+              echo "Error: Package '$PKG_NAME' not found in the monorepo."
+              exit 1
           fi
 
-      - name: Compile firmware
-        run: npm run compile
-
-      - name: Upload firmware to the GitHub Releases
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          # TODO
-  
-      # Rollback step that runs only on failure
-      - name: Rollback version changes
-        if: failure() && steps.version-step.outputs.VERSION_CREATED == 'true'
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          echo "Pipeline failed, rolling back version changes..."
-          
-          # Get the commit that will be reverted to identify tags to remove
-          NEW_COMMIT="${{ steps.version-step.outputs.NEW_COMMIT }}"
-          PREVIOUS_COMMIT="${{ steps.version-step.outputs.PREVIOUS_COMMIT }}"
-          
-          # Find and delete any tags pointing to the version commit
-          echo "Checking for tags to remove..."
-          TAGS_TO_DELETE=$(git tag --points-at $NEW_COMMIT)
-          
-          if [ -n "$TAGS_TO_DELETE" ]; then
-            echo "Found tags to delete: $TAGS_TO_DELETE"
-            for tag in $TAGS_TO_DELETE; do
-              echo "Deleting local tag: $tag"
-              git tag -d $tag
-              echo "Deleting remote tag: $tag"
-              git push origin :refs/tags/$tag || echo "Warning: Could not delete remote tag $tag"
-            done
-          else
-            echo "No tags found pointing to the version commit"
+          PKG_PRIVATE=$(npm run --silent list-packages | jq -r --arg pkg "$PKG_NAME" '.[] | select(.name == $pkg) | .private')
+          # Skip if the package is private
+          if [ "$PKG_PRIVATE" == "true" ]; then
+              echo "Skipping private package '$PKG_NAME'."
+              exit 0
           fi
-          
-          # Reset to the previous commit (before version bump)
-          git reset --hard $PREVIOUS_COMMIT
-          
-          # Force push to revert the version bump commit
-          git push --force-with-lease origin main
-          
-          echo "Version changes and tags have been rolled back successfully"
+
+          echo "Found package path: $PKG_PATH"
+
+          # Get the path after 'devices/' to use as DEVICE_CONF_PATH
+          DEVICE_CONF_PATH=${PKG_PATH#*/devices/}  # e.g., sensasoil/v3_0
+
+          # Compile the device firmware
+          # Get the artifact base name for later use (use the stuff after the slash in the package name)
+          ARTIFACT_BASE=${PKG_NAME#*/}  # e.g., sensasoil_v3_0
+          npm run compile-device ${DEVICE_CONF_PATH} dist/${ARTIFACT_BASE}
+
+          # Define assets for upload (.bin and .bin.md5)
+          OUTPUT_FIRMWARE="dist/${ARTIFACT_BASE}.bin"
+          OUTPUT_MD5="dist/${ARTIFACT_BASE}.bin.md5"
+
+      - name: Upload to Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ matrix.tag }}
+          files: |
+            ${{ steps.artifacts.outputs.OUTPUT_FIRMWARE }}
+            ${{ steps.artifacts.outputs.OUTPUT_MD5 }}
+        env:
+          generate_release_notes: true
