@@ -140,9 +140,12 @@ jobs:
           echo "OUTPUT_OTA_MD5=dist/${ARTIFACT_BASE}.ota.bin.md5" >> $GITHUB_ENV
           echo "OUTPUT_FACTORY_FIRMWARE=dist/${ARTIFACT_BASE}.factory.bin" >> $GITHUB_ENV
           echo "OUTPUT_FACTORY_MD5=dist/${ARTIFACT_BASE}.factory.bin.md5" >> $GITHUB_ENV
+          VERSION_NAME="${TAG##*@}"
           PKG_NAME=${TAG%@*}
           LATEST_TAG="${PKG_NAME}@latest"
           echo "LATEST_TAG=${LATEST_TAG}" >> $GITHUB_ENV
+          echo "${VERSION_NAME}" > ${ARTIFACT_BASE}.version.txt
+          echo "VERSION_FILE=${ARTIFACT_BASE}.version.txt" >> $GITHUB_ENV
 
       - name: Upload to Release
         uses: softprops/action-gh-release@v1
@@ -168,9 +171,10 @@ jobs:
         with:
           tag_name: ${{ env.LATEST_TAG }}
           files: |
-            ${{ env.OUTPUT_FIRMWARE }}
-            ${{ env.OUTPUT_MD5 }}
+            ${{ env.OUTPUT_OTA_FIRMWARE }}
+            ${{ env.OUTPUT_OTA_MD5 }}
             ${{ env.OUTPUT_FACTORY_FIRMWARE }}
             ${{ env.OUTPUT_FACTORY_MD5 }}
+            ${{ env.VERSION_FILE }}
         env:
           generate_release_notes: true
