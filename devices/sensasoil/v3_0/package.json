@@ -1,7 +1,7 @@
 {
     "name": "@tierralive-firmware/sensasoil-v3_0",
-    "version": "0.0.3",
+    "version": "0.1.0",
     "dependencies": {
-        "@tierralive-firmware/sensasoil-common": "^0.0.3"
+        "@tierralive-firmware/sensasoil-common": "^0.1.0"
     }
 }
