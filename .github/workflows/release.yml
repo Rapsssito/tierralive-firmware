@@ -16,7 +16,7 @@ permissions:
 
 jobs:
   bump-version:
-    name: Bump Version
+    name: Bump and Compile
     runs-on: ubuntu-slim
     outputs:
       new_tags: ${{ steps.extract_tags.outputs.new_tags }}
@@ -26,11 +26,6 @@ jobs:
         with:
           fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: "lts/*"
 
       - name: Setup Python
         uses: actions/setup-python@v5
@@ -44,6 +39,11 @@ jobs:
         run: |
           npm run setup-esphome
           echo "$PWD/.venv/bin" >> $GITHUB_PATH
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "lts/*"
 
       - name: CI Checks
         run: npm run ci-checks
@@ -65,6 +65,47 @@ jobs:
           echo "Found tags: $TAGS"
           echo "new_tags=$TAGS" >> $GITHUB_OUTPUT
 
+      - name: Compile artifacts
+        if: ${{ steps.extract_tags.outputs.new_tags != '[]' && steps.extract_tags.outputs.new_tags != '' }}
+        run: |
+          TAGS='${{ steps.extract_tags.outputs.new_tags }}'
+          for TAG in $(echo "$TAGS" | jq -r '.[]'); do
+            echo "Compiling artifacts for tag: $TAG"
+
+            # Extract package name from tag (e.g., @tierralive-firmware/sensasoil_v3_0@0.0.1 -> @tierralive-firmware/sensasoil_v3_0)
+            PKG_NAME=${TAG%@*}
+
+            # Find package location
+            PKG_PATH=$(npm run --silent list-packages | jq -r --arg pkg "$PKG_NAME" '.[] | select(.name == $pkg) | .location')
+
+            if [ -z "$PKG_PATH" ] || [ "$PKG_PATH" == "null" ]; then
+                echo "Error: Package '$PKG_NAME' not found in the monorepo." >&2
+                exit 1
+            fi
+
+            PKG_PRIVATE=$(npm run --silent list-packages | jq -r --arg pkg "$PKG_NAME" '.[] | select(.name == $pkg) | .private')
+            # Skip if the package is private
+            if [ "$PKG_PRIVATE" == "true" ]; then
+                echo "Skipping private package '$PKG_NAME'."
+                continue
+            fi
+
+            # Get the path after 'devices/' to use as DEVICE_CONF_PATH
+            DEVICE_CONF_PATH=${PKG_PATH#*/devices/}  # e.g., sensasoil/v3_0
+
+            # Compile the device firmware
+            # Get the artifact base name for later use (use the stuff after the slash in the package name)
+            ARTIFACT_BASE=${PKG_NAME#*/}  # e.g., sensasoil_v3_0
+            npm run compile-device ${DEVICE_CONF_PATH} dist/${ARTIFACT_BASE}
+          done
+
+      - name: Upload artifacts
+        if: ${{ steps.extract_tags.outputs.new_tags != '[]' && steps.extract_tags.outputs.new_tags != '' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: esphome-artifacts
+          path: dist/*.bin*
+
   publish-assets:
     name: Publish Assets
     needs: bump-version
@@ -84,68 +125,26 @@ jobs:
           ref: ${{ matrix.tag }}
           fetch-depth: 0
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
         with:
-          node-version: "lts/*"
+          name: esphome-artifacts
+          path: dist
 
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Install ESPHome
-        run: |
-          npm run setup-esphome
-          echo "$PWD/.venv/bin" >> $GITHUB_PATH
-
-      - name: Compile artifact
-        id: artifacts
+      - name: Resolve artifact paths
         run: |
           TAG="${{ matrix.tag }}"
-
-          # Extract package name from tag (e.g., @tierralive-firmware/sensasoil_v3_0@0.0.1 -> @tierralive-firmware/sensasoil_v3_0)
-          PKG_NAME=${TAG%@*}
-          echo "Package Name: $PKG_NAME"
-
-          # Find package location
-          PKG_PATH=$(npm run --silent list-packages | jq -r --arg pkg "$PKG_NAME" '.[] | select(.name == $pkg) | .location')
-
-          if [ -z "$PKG_PATH" ] || [ "$PKG_PATH" == "null" ]; then
-              echo "Error: Package '$PKG_NAME' not found in the monorepo."
-              exit 1
-          fi
-
-          PKG_PRIVATE=$(npm run --silent list-packages | jq -r --arg pkg "$PKG_NAME" '.[] | select(.name == $pkg) | .private')
-          # Skip if the package is private
-          if [ "$PKG_PRIVATE" == "true" ]; then
-              echo "Skipping private package '$PKG_NAME'."
-              exit 0
-          fi
-
-          echo "Found package path: $PKG_PATH"
-
-          # Get the path after 'devices/' to use as DEVICE_CONF_PATH
-          DEVICE_CONF_PATH=${PKG_PATH#*/devices/}  # e.g., sensasoil/v3_0
-
-          # Compile the device firmware
-          # Get the artifact base name for later use (use the stuff after the slash in the package name)
-          ARTIFACT_BASE=${PKG_NAME#*/}  # e.g., sensasoil_v3_0
-          npm run compile-device ${DEVICE_CONF_PATH} dist/${ARTIFACT_BASE}
-
-          # Define assets for upload (.bin and .bin.md5)
-          OUTPUT_FIRMWARE="dist/${ARTIFACT_BASE}.bin"
-          OUTPUT_MD5="dist/${ARTIFACT_BASE}.bin.md5"
+          ARTIFACT_BASE="${TAG#*/}"
+          ARTIFACT_BASE="${ARTIFACT_BASE%@*}"
+          echo "OUTPUT_FIRMWARE=dist/${ARTIFACT_BASE}.bin" >> $GITHUB_ENV
+          echo "OUTPUT_MD5=dist/${ARTIFACT_BASE}.bin.md5" >> $GITHUB_ENV
 
       - name: Upload to Release
         uses: softprops/action-gh-release@v1
         with:
           tag_name: ${{ matrix.tag }}
           files: |
-            ${{ steps.artifacts.outputs.OUTPUT_FIRMWARE }}
-            ${{ steps.artifacts.outputs.OUTPUT_MD5 }}
+            ${{ env.OUTPUT_FIRMWARE }}
+            ${{ env.OUTPUT_MD5 }}
         env:
           generate_release_notes: true

@@ -22,8 +22,6 @@ http_request:
   useragent: SensaSoil_${HARDWARE_VERSION}/${FIRMWARE_VERSION}
 
 ota:
-  - platform: esphome
-    password: "e35c052131kbccczbdd6e25434016cda1f"
   - platform: http_request
     on_end:
       - lambda: ! id(mqtt_discovery_required) = true;
