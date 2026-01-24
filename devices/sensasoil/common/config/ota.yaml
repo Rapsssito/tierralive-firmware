@@ -1,0 +1,25 @@
+http_request:
+  useragent: SensaSoil_${HARDWARE_VERSION}/${FIRMWARE_VERSION}
+
+ota:
+  - platform: http_request
+    on_end:
+      - lambda: ! id(mqtt_initial_connection_setup) = true;
+    on_error:
+      - script.execute: main_script
+
+script:
+  - id: ota_update
+    then:
+      # Get the OTA URL
+      - lambda: |-
+            id(mqtt_id).subscribe("${MQTT_PREFIX}/f/u", [=](const std::string &topic, const std::string &payload) {
+              id(ota_url) = payload;
+            }, 1);
+      # Wait until the OTA URL is defined
+      - wait_until:
+        - lambda: ! return !id(ota_url).empty();
+      # Call OTA HTTP update
+      - ota.http_request.flash:
+          url: !lambda return id(ota_url) + "?h=${HARDWARE_VERSION}&ex=bin";
+          md5_url: !lambda return id(ota_url) + "?h=${HARDWARE_VERSION}&ex=md5";

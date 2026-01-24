@@ -1,0 +1,118 @@
+.public_sensor: &public_sensor
+  update_interval: never
+  qos: 1
+  subscribe_qos: 1
+
+substitutions:
+  # Public connection error states
+  SENSASOIL_STATE_ERROR_WIFI: "WIFI"
+  SENSASOIL_STATE_ERROR_MQTT: "MQTT"
+  SENSASOIL_STATE_ERROR_MQTT_TIMEOUT: "MQTT_TIMEOUT"
+  # Public error states
+  SENSASOIL_STATE_ERROR_NONE: "0"
+  SENSASOIL_STATE_ERROR_UNKNOWN: "UNKNOWN"
+  SENSASOIL_STATE_ERROR_PANIC: "PANIC"
+  SENSASOIL_STATE_ERROR_WDT: "WDT"
+  SENSASOIL_STATE_ERROR_BROWNOUT: "BROWNOUT"
+  SENSASOIL_STATE_ERROR_EFUSE: "EFUSE"
+  SENSASOIL_STATE_ERROR_PWR_GLITCH: "PWR_GLITCH"
+  SENSASOIL_STATE_ERROR_CPU_LOCKUP: "CPU_LOCKUP"
+
+globals:
+  # INTERNAL #
+  - id: diagnostic_mode_enabled
+    type: bool
+    restore_value: yes
+    initial_value: "false"
+
+sensor:
+  - platform: template
+    id: deep_sleep_duration
+    name: "Deep sleep duration"
+    entity_category: "diagnostic"
+    icon: mdi:clock-outline
+    state_class: measurement
+    unit_of_measurement: minutes
+    lambda: ! return id(battery_percentage).state;
+    filters:
+    - calibrate_linear:
+        - 0.00 -> 60 # 1h
+        - 100.00 -> 15 # 15min
+    <<: *public_sensor
+    state_topic: !lambda 'return (id(diagnostic_mode_enabled) | id(mqtt_initial_connection_setup)) ? id(mqtt_id).get_topic_prefix() + "/s_d" : "";'
+
+text_sensor:
+  - platform: template
+    id: firmware_version
+    name: "Firmware version"
+    icon: mdi:chip
+    entity_category: "diagnostic"
+    <<: *public_sensor
+    state_topic: !lambda 'return id(mqtt_initial_connection_setup) ? id(mqtt_id).get_topic_prefix() + "/fw" : "";'
+  - platform: template
+    id: hardware_version
+    name: "Hardware version"
+    icon: mdi:memory
+    entity_category: "diagnostic"
+    <<: *public_sensor
+    state_topic: !lambda 'return id(mqtt_initial_connection_setup) ? id(mqtt_id).get_topic_prefix() + "/hw" : "";'
+  - platform: template
+    id: last_update_id
+    name: "Last update ID"
+    icon: mdi:message-badge
+    entity_category: "diagnostic"
+    <<: *public_sensor
+    state_topic: !lambda return id(mqtt_id).get_topic_prefix() + "/id";
+  - platform: template
+    id: error_state
+    name: "Error state"
+    icon: mdi:alert-outline
+    entity_category: "diagnostic"
+    lambda: |-
+        switch (esp_reset_reason()) {
+        case ESP_RST_PANIC:
+        return std::string("${SENSASOIL_STATE_ERROR_PANIC}");
+        case ESP_RST_INT_WDT:
+        case ESP_RST_TASK_WDT:
+        case ESP_RST_WDT:
+        return std::string("${SENSASOIL_STATE_ERROR_WDT}");
+        case ESP_RST_BROWNOUT:
+        return std::string("${SENSASOIL_STATE_ERROR_BROWNOUT}");
+        case ESP_RST_EFUSE:
+        return std::string("${SENSASOIL_STATE_ERROR_EFUSE}");
+        case ESP_RST_PWR_GLITCH:
+        return std::string("${SENSASOIL_STATE_ERROR_PWR_GLITCH}");
+        case ESP_RST_CPU_LOCKUP:
+        return std::string("${SENSASOIL_STATE_ERROR_CPU_LOCKUP}");
+        default:
+        break;
+        }
+        switch (id(last_exec_error)) {
+        case ${ERROR_WIFI}:
+        return std::string("${SENSASOIL_STATE_ERROR_WIFI}");
+        case ${ERROR_MQTT}:
+        return std::string("${SENSASOIL_STATE_ERROR_MQTT}");
+        case ${ERROR_MQTT_TIMEOUT}:
+        return std::string("${SENSASOIL_STATE_ERROR_MQTT_TIMEOUT}");
+        case ${ERROR_NONE}:
+        return std::string("${SENSASOIL_STATE_ERROR_NONE}");
+        default:
+        return std::string("${SENSASOIL_STATE_ERROR_UNKNOWN}");
+        }
+    <<: *public_sensor
+    state_topic: !lambda return id(mqtt_id).get_topic_prefix() + "/er";
+
+switch:
+  - platform: template
+    id: diagnostic_mode
+    icon: mdi:bug
+    name: "Diagnostic mode"
+    lambda: ! return id(diagnostic_mode_enabled);
+    turn_on_action:
+      - lambda: ! id(diagnostic_mode_enabled) = true;
+    turn_off_action:
+      - lambda: ! id(diagnostic_mode_enabled) = false;
+    qos: 1
+    subscribe_qos: 1
+    state_topic: !lambda return id(mqtt_id).get_topic_prefix() + "/dbg/s";
+    command_topic: !lambda return id(mqtt_id).get_topic_prefix() + "/dbg/x";

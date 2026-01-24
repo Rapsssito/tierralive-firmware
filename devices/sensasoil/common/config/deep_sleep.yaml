@@ -2,37 +2,14 @@ deep_sleep:
   id: deep_sleep_1
 
 script:
-  - id: _send_to_deep_sleep
-    then:
-      - deep_sleep.enter:
-          id: deep_sleep_1
-          sleep_duration: !lambda return id(deep_sleep_duration).state * 1000 * 60;
-
-  - id: safe_send_to_deep_sleep
-    then:
-      - if:
-          condition:
-            - switch.is_off: prevent_deep_sleep
-          then:
-            # TODO: Change and just wait for the publish callback
-            # Listen to the final state being published
-            - lambda: |-
-                id(mqtt_id).subscribe(id(mqtt_id).get_topic_prefix() + "/sensor/current_state/state", [=](const std::string &topic, const std::string &payload) {
-                    if (payload != "${SENSASOIL_STATE_DEEP_SLEEP}") return;
-                    id(_send_to_deep_sleep)->execute();
-                }, 1);
-            - sensor.template.publish:
-                id: current_state
-                state: ${SENSASOIL_STATE_DEEP_SLEEP}
-            # If the message is not received in time, reset
-            - script.execute: send_to_error_deep_sleep_after_timeout
-            - script.wait: send_to_error_deep_sleep_after_timeout
-
-  - id: send_to_error_deep_sleep_after_timeout
+  - id: send_to_deep_sleep
+    parameters:
+      delay_ms: uint32_t
+      sleep_duration_ms: uint32_t
     then:
       # Send to sleep after a delay
-      # Used to avoid wasting 15mins trying to connect to MQTT or WiFi
-      - delay: 1min
+      # For example, used to avoid wasting 15mins trying to connect to MQTT or WiFi
+      - delay: !lambda return delay_ms;
       - deep_sleep.enter:
           id: deep_sleep_1
-          sleep_duration: 5min
+          sleep_duration: !lambda return sleep_duration_ms;

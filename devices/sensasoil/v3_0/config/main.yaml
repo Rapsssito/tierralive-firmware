@@ -1,13 +1,13 @@
 packages:
   sensasoil_common_base: !include ../../common/config/base.yaml
+  sensasoil_common_ble: !include ../../common/config/ble.yaml
   sensasoil_common_deep_sleep: !include ../../common/config/deep_sleep.yaml
   sensasoil_common_network: !include ../../common/config/network.yaml
-  sensasoil_common_ble: !include ../../common/config/ble.yaml
-  sensasoil_common_sensors: !include ../../common/config/sensors.yaml
-  peripherals: !include peripherals.yaml
-  sensors: !include sensors.yaml
+  sensasoil_common_ota: !include ../../common/config/ota.yaml
+  sensasoil_common_entities: !include ../../common/config/entities.yaml
+  entities: !include entities.yaml
 
 substitutions:
   HARDWARE_VERSION: "3.0"
-  HARDWARE_VERSION_UNDERSCORE: "3_0"
+  HARDWARE_VERSION_FLAT: "3-0"
   FIRMWARE_VERSION: !env_var FIRMWARE_VERSION

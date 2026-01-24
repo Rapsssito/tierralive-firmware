@@ -1,0 +1,295 @@
+.public_sensor: &public_sensor
+  update_interval: never
+  qos: 1
+  subscribe_qos: 1
+
+globals:
+  # INTERNAL #
+  - id: power_sensors_time
+    type: unsigned long
+    restore_value: no
+    initial_value: "0"
+
+sensor:
+  - platform: wifi_signal
+    name: "WiFi signal"
+    id: wifi_signal_db
+    accuracy_decimals: 2
+    state_class: measurement
+    entity_category: "diagnostic"
+    device_class: SIGNAL_STRENGTH
+    state_topic: !lambda 'return (id(diagnostic_mode_enabled) | id(mqtt_initial_connection_setup)) ? id(mqtt_id).get_topic_prefix() + "/w_s" : "";'
+    <<: *public_sensor
+  - platform: internal_temperature
+    id: chip_temperature
+    name: "Chip temperature"
+    accuracy_decimals: 1
+    device_class: TEMPERATURE
+    state_class: measurement
+    entity_category: "diagnostic"
+    state_topic: !lambda 'return (id(diagnostic_mode_enabled) | id(mqtt_initial_connection_setup)) ? id(mqtt_id).get_topic_prefix() + "/c_t" : "";'
+    <<: *public_sensor
+  - platform: dht
+    pin: GPIO5
+    model: DHT22
+    id: temperature_humidity_sensor
+    update_interval: never
+    temperature:
+      name: "Ambient temperature"
+      id: ambient_temperature
+      accuracy_decimals: 1
+      state_class: measurement
+      device_class: TEMPERATURE
+      state_topic: !lambda return id(mqtt_id).get_topic_prefix() + "/a_t";
+      qos: 1
+      subscribe_qos: 1
+    humidity:
+      name: "Ambient humidity"
+      id: ambient_humidity
+      accuracy_decimals: 1
+      device_class: HUMIDITY
+      state_class: measurement
+      state_topic: !lambda return id(mqtt_id).get_topic_prefix() + "/a_h";
+      qos: 1
+      subscribe_qos: 1
+  - platform: adc
+    id: battery_v
+    pin: GPIO3
+    name: "Battery voltage"
+    attenuation: 12db
+    unit_of_measurement: "V"
+    entity_category: "diagnostic"
+    accuracy_decimals: 2
+    samples: 20
+    filters:
+    - calibrate_linear:
+          - 1.91 -> 3.3
+          - 2.40 -> 4.2
+    state_class: measurement
+    state_topic: !lambda 'return (id(diagnostic_mode_enabled) | id(mqtt_initial_connection_setup)) ? id(mqtt_id).get_topic_prefix() + "/b_v" : "";'
+    <<: *public_sensor
+  - platform: template
+    id: battery_percentage
+    name: "Battery percentage"
+    unit_of_measurement: "%"
+    accuracy_decimals: 0
+    state_class: measurement
+    device_class: BATTERY
+    icon: mdi:battery
+    lambda: ! return id(battery_v).state;
+    filters:
+    - calibrate_linear:
+        - 3.3 -> 0.00
+        - 4.2 -> 100.00
+    - clamp:
+        min_value: 0
+        max_value: 100
+    on_value:
+      then:
+        - if:
+            condition:
+              - ble.enabled
+            then:
+              - ble_server.characteristic.notify:
+                  id: ble_battery_level_char
+              - ble_server.characteristic.notify:
+                  id: ble_battery_status_char
+    state_topic: !lambda return id(mqtt_id).get_topic_prefix() + "/b_p";
+    <<: *public_sensor
+  - platform: adc
+    id: soil_temperature_v
+    pin: GPIO1
+    name: "Soil temperature voltage"
+    attenuation: 12db
+    accuracy_decimals: 2
+    unit_of_measurement: "V"
+    entity_category: "diagnostic"
+    samples: 20
+    state_class: measurement
+    state_topic: !lambda 'return (id(diagnostic_mode_enabled) | id(mqtt_initial_connection_setup)) ? id(mqtt_id).get_topic_prefix() + "/s_tv" : "";'
+    <<: *public_sensor
+  - platform: template
+    id: soil_temperature
+    name: "Soil temperature"
+    icon: mdi:thermometer-probe
+    unit_of_measurement: "°C"
+    accuracy_decimals: 1
+    device_class: TEMPERATURE
+    state_class: measurement
+    lambda: ! return id(soil_temperature_v).state;
+    filters:
+    - lambda: return 298.15 / (1 + 298.15 / 4050 * log(3.3 / x - 1)) - 273.15;
+    state_topic: !lambda return id(mqtt_id).get_topic_prefix() + "/s_t";
+    <<: *public_sensor
+  - platform: adc
+    id: soil_volumetric_water_v
+    pin: GPIO4
+    name: "Soil volumetric water voltage"
+    attenuation: 12db
+    unit_of_measurement: "V"
+    entity_category: "diagnostic"
+    samples: 20
+    state_class: measurement
+    state_topic: !lambda 'return (id(diagnostic_mode_enabled) | id(mqtt_initial_connection_setup)) ? id(mqtt_id).get_topic_prefix() + "/s_wv" : "";'
+    <<: *public_sensor
+  - platform: template
+    id: soil_volumetric_water
+    name: "Soil volumetric water"
+    icon: mdi:water-percent
+    unit_of_measurement: "%"
+    device_class: MOISTURE
+    state_class: measurement
+    lambda: ! return id(soil_volumetric_water_v).state;
+    filters:
+    - lambda: return 778 * exp(-2.51 * x);
+    - clamp:
+        min_value: 0
+        max_value: 100
+    <<: *public_sensor
+    state_topic: !lambda return id(mqtt_id).get_topic_prefix() + "/s_w";
+
+binary_sensor:
+  - platform: gpio
+    id: is_charging_internal
+    use_interrupt: true
+    pin:
+      number: GPIO6
+      mode: 
+        input: True
+        pullup: True
+      inverted: True
+    internal: True
+  - platform: gpio
+    id: factory_reset_internal_button
+    use_interrupt: True
+    pin:
+      number: GPIO9
+      ignore_strapping_warning: true
+      mode:
+        input: True
+        pullup: True
+      inverted: True
+    internal: True
+    filters:
+      - delayed_on: 15s
+      - delayed_off: 10ms
+    on_press:
+      then:
+        - button.press: factory_reset_button
+  - platform: template
+    id: is_battery_charging
+    name: "Charging"
+    device_class: BATTERY_CHARGING
+    icon: mdi:battery-charging
+    on_state:
+      then:
+        - if:
+            condition:
+              - ble.enabled
+            then:
+              - ble_server.characteristic.notify:
+                  id: ble_battery_status_char
+    qos: 1
+    subscribe_qos: 1
+    state_topic: !lambda return id(mqtt_id).get_topic_prefix() + "/b_c";
+
+output:
+  - platform: ledc
+    id: led_status_output_internal
+    pin: GPIO0
+
+light:
+  - platform: monochromatic
+    id: led_status
+    name: "Status LED"
+    output: led_status_output_internal
+    restore_mode: ALWAYS_OFF
+    effects:
+      - pulse:
+          # Blink 5 times every second
+          name: "mqtt_disconnect_effect"
+          transition_length: 100ms
+          update_interval: 100ms
+          min_brightness: 0%
+          max_brightness: 100%
+      - pulse:
+          # Blink once every second
+          name: "wifi_disconnect_effect"
+          transition_length: 250ms
+          update_interval: 1s
+          min_brightness: 0%
+          max_brightness: 100%
+      - pulse:
+          # Pulse slowly every 4 seconds
+          name: "manual_ble_server_effect"
+          transition_length: 2s
+          update_interval: 2s
+          min_brightness: 40%
+          max_brightness: 100%
+    internal: True
+
+switch:
+  - platform: gpio
+    id: power_sensors
+    pin: GPIO10
+    icon: mdi:electric-switch
+    name: "Power sensors"
+    restore_mode: ALWAYS_OFF
+    internal: True
+    on_turn_on:
+      then:
+        - lambda: ! id(power_sensors_time) = millis();
+
+button:
+  - platform: factory_reset
+    id: factory_reset_button
+    name: "Factory reset"
+    internal: True
+
+script:
+  - id: refresh_sensors_script
+    then:
+      # Turn on peripheral power if not already
+      - if:
+          condition:
+            switch.is_off: power_sensors
+          then:
+            - switch.turn_on: power_sensors
+      # Publish state for firmware and hardware versions (automatically published only once handled by sensor)
+      - text_sensor.template.publish:
+          id: firmware_version
+          state: "${FIRMWARE_VERSION}"
+      - text_sensor.template.publish:
+          id: hardware_version
+          state: "${HARDWARE_VERSION}"
+      # Publish state of non-peripherals
+      - component.update: error_state
+      - binary_sensor.template.publish:
+          id: is_battery_charging
+          state: !lambda return id(is_charging_internal).state;
+      - component.update: chip_temperature
+      - delay: 1ms
+      - component.update: wifi_signal_db
+      - component.update: battery_v
+      - delay: 1ms
+      - component.update: battery_percentage
+      # Update time to sleep based on battery level
+      - component.update: deep_sleep_duration
+      # Wait 150ms since power_sensors_time
+      - if:
+          condition:
+            lambda: !lambda return 150 > (millis() - id(power_sensors_time));
+          then:
+            - delay: !lambda return 150 - (millis() - id(power_sensors_time));
+      # Update peripherals voltage sensors
+      - component.update: soil_temperature_v
+      - delay: 1ms
+      - component.update: temperature_humidity_sensor
+      - delay: 1ms
+      - component.update: soil_volumetric_water_v
+      - delay: 1ms
+      # Turn off peripheral power
+      - switch.turn_off: power_sensors
+      # Update template sensors based on the voltage
+      - component.update: soil_temperature
+      - component.update: soil_volumetric_water

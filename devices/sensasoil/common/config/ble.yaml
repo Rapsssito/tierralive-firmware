@@ -231,9 +231,6 @@ script:
       - wait_until:
           ble.enabled
       # Display LED status
-      - sensor.template.publish:
-          id: current_state
-          state: ${SENSASOIL_STATE_BLE_SERVER}
       - light.turn_on: led_status
       - light.control: 
           id: led_status
@@ -281,6 +278,7 @@ script:
       - wait_until:
         - not: mqtt.connected
       - lambda: |-
+          id(mqtt_initial_connection_setup) = true;
           id(device_setup_state) = ${SETUP_STATE_MQTT_CONFIG};
           id(improv_mqtt_configure_error_timeout)->execute(id(mqtt_broker_address), id(mqtt_broker_port), id(mqtt_username), id(mqtt_password));
           id(mqtt_broker_address) = new_mqtt_broker_address;
