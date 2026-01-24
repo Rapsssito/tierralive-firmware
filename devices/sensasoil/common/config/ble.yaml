@@ -1,3 +1,41 @@
+substitutions:
+  # Improv BLE
+  IMPROV_SERVICE_UUID: "00467768-6228-2272-4663-277478268000"
+  IMPROV_STATUS_UUID: "00467768-6228-2272-4663-277478268001"
+  IMPROV_ERROR_UUID: "00467768-6228-2272-4663-277478268002"
+  IMPROV_RPC_COMMAND_UUID: "00467768-6228-2272-4663-277478268003"
+  IMPROV_RPC_RESULT_UUID: "00467768-6228-2272-4663-277478268004"
+  IMPROV_CAPABILITIES_UUID: "00467768-6228-2272-4663-277478268005"
+  # ExtendedImprov commands
+  E_IMPROV_MQTT_CHANGE_SETTINGS_COMMAND_ID: "1"
+  E_IMPROV_FACTORY_RESET_COMMAND_ID: "2"
+  E_IMPROV_MQTT_VIEW_SETTINGS_COMMAND_ID: "3"
+  E_IMPROV_WIFI_VIEW_SETTINGS_COMMAND_ID: "4"
+  # Custom BLE
+  CUSTOM_BLE_SERVICE_UUID: "3b351f04-1db6-49f3-b155-cb5d18c80000"
+  CUSTOM_BLE_INFO_UUID: "3b351f04-1db6-49f3-b155-cb5d18c80001"
+  # Internal setup states
+  SETUP_STATE_INIT: "0"
+  SETUP_STATE_WIFI_CONFIG: "1"
+  SETUP_STATE_MQTT_CONFIG: "2"
+
+globals:
+  # INTERNAL #
+  - id: last_ble_communication_timestamp
+    type: unsigned long
+    restore_value: no
+    initial_value: "0"
+  - id: improv_buffer
+    type: std::vector<uint8_t>
+    restore_value: no
+  - id: improv_state
+    type: uint8_t
+    restore_value: no
+  - id: device_setup_state
+    type: uint8_t
+    restore_value: no
+    initial_value: ${SETUP_STATE_INIT}
+
 esp32_ble:
   id: ble_id
   enable_on_boot: False
@@ -183,3 +221,124 @@ esp32_ble_server:
           id: improv_rpc_result
           read: true
           notify: true
+
+script:
+  - id: execute_ble_server
+    then:
+      - lambda: ! id(improv_state) = improv::STATE_AUTHORIZED;
+      # Turn on BLE
+      - ble.enable
+      - wait_until:
+          ble.enabled
+      # Display LED status
+      - sensor.template.publish:
+          id: current_state
+          state: ${SENSASOIL_STATE_BLE_SERVER}
+      - light.turn_on: led_status
+      - light.control: 
+          id: led_status
+          effect: "manual_ble_server_effect"
+      # Reset last BLE communication
+      - lambda: ! id(last_ble_communication_timestamp) = millis();
+      # If the last communication was more than 5 minutes ago, close the server
+      - wait_until:
+          lambda: ! return millis() - id(last_ble_communication_timestamp) >= 5 * 60 * 1000;
+      - light.turn_off: led_status
+
+  - id: improv_wifi_configure
+    parameters:
+      ssid: std::string
+      password: std::string
+    then:
+      - lambda: ! id(device_setup_state) = ${SETUP_STATE_WIFI_CONFIG};
+      - wifi.configure:
+          ssid: !lambda return ssid;
+          password: !lambda return password;
+          save: true
+          timeout: 30000ms
+          on_connect:
+            - lambda: |-
+                id(device_setup_state) = ${SETUP_STATE_INIT};
+                id(improv_state) = improv::STATE_PROVISIONED;
+                id(improv_status_characteristic)->notify();
+          on_error:
+            - lambda: |-
+                id(device_setup_state) = ${SETUP_STATE_INIT};
+                id(improv_error_characteristic)->set_value(improv::ERROR_UNABLE_TO_CONNECT);
+                id(improv_error_characteristic)->notify();
+                id(improv_state) = improv::ERROR_UNABLE_TO_CONNECT;
+                id(improv_status_characteristic)->notify();
+
+  - id: improv_mqtt_configure
+    parameters:
+      new_mqtt_broker_address: std::string
+      new_mqtt_broker_port: uint16_t
+      new_mqtt_username: std::string
+      new_mqtt_password: std::string
+    then:
+      - script.stop: mqtt_setup
+      - mqtt.disable
+      - wait_until:
+        - not: mqtt.connected
+      - lambda: |-
+          id(device_setup_state) = ${SETUP_STATE_MQTT_CONFIG};
+          id(improv_mqtt_configure_error_timeout)->execute(id(mqtt_broker_address), id(mqtt_broker_port), id(mqtt_username), id(mqtt_password));
+          id(mqtt_broker_address) = new_mqtt_broker_address;
+          id(mqtt_broker_port) = new_mqtt_broker_port;
+          id(mqtt_username) = new_mqtt_username;
+          id(mqtt_password) = new_mqtt_password;
+      - script.execute: mqtt_setup
+      - script.wait: mqtt_setup
+      - script.stop: improv_mqtt_configure_error_timeout
+      - lambda: |-
+          id(device_setup_state) = ${SETUP_STATE_INIT};
+          id(improv_state) = improv::STATE_PROVISIONED;
+          id(improv_status_characteristic)->notify();
+
+  - id: improv_mqtt_configure_error_timeout
+    parameters:
+      old_mqtt_broker_address: std::string
+      old_mqtt_broker_port: uint16_t
+      old_mqtt_username: std::string
+      old_mqtt_password: std::string
+    then:
+      - delay: 5min
+      - script.stop: improv_mqtt_configure
+      - script.stop: mqtt_setup
+      - lambda: |-
+          id(device_setup_state) = ${SETUP_STATE_INIT};
+          id(improv_error_characteristic)->set_value(improv::ERROR_UNABLE_TO_CONNECT);
+          id(improv_error_characteristic)->notify();
+          id(improv_state) = improv::ERROR_UNABLE_TO_CONNECT;
+          id(improv_status_characteristic)->notify();
+          id(mqtt_broker_address) = old_mqtt_broker_address;
+          id(mqtt_broker_port) = old_mqtt_broker_port;
+          id(mqtt_username) = old_mqtt_username;
+          id(mqtt_password) = old_mqtt_password;
+      - script.execute: mqtt_setup
+
+  - id: improv_wifi_mqtt_show_config
+    then:
+      - lambda: |-
+          std::string mqtt_port_str(sizeof(uint16_t), 0);
+          mqtt_port_str[0] = static_cast<char>(id(mqtt_broker_port) & 0xFF);
+          mqtt_port_str[1] = static_cast<char>((id(mqtt_broker_port) >> 8) & 0xFF);
+          std::vector<std::string> response = {
+              {${E_IMPROV_MQTT_VIEW_SETTINGS_COMMAND_ID}},                                    
+              id(mqtt_broker_address),
+              mqtt_port_str,
+              id(mqtt_username)
+          };
+          id(improv_rpc_result)->set_value(improv::build_rpc_response(improv::CUSTOM, response, true));
+          id(improv_rpc_result)->notify();
+
+  - id: improv_wifi_ble_show_config
+    then:
+      - lambda: |-
+          std::string ssid = id(wificomponent)->get_sta().get_ssid();
+          std::vector<std::string> response = {
+              {${E_IMPROV_WIFI_VIEW_SETTINGS_COMMAND_ID}},                                    
+              ssid
+          };
+          id(improv_rpc_result)->set_value(improv::build_rpc_response(improv::CUSTOM, response, true));
+          id(improv_rpc_result)->notify();

@@ -1,11 +1,9 @@
 packages:
-  sensasoil_common_substitutions: !include ../../common/config/substitutions.yaml
   sensasoil_common_base: !include ../../common/config/base.yaml
+  sensasoil_common_deep_sleep: !include ../../common/config/deep_sleep.yaml
   sensasoil_common_network: !include ../../common/config/network.yaml
   sensasoil_common_ble: !include ../../common/config/ble.yaml
-  sensasoil_common_globals: !include ../../common/config/globals.yaml
-  sensasoil_common_entities: !include ../../common/config/entities.yaml
-  sensasoil_common_scripts: !include ../../common/config/scripts.yaml
+  sensasoil_common_sensors: !include ../../common/config/sensors.yaml
   peripherals: !include peripherals.yaml
   sensors: !include sensors.yaml
 

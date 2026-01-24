@@ -1,3 +1,50 @@
+substitutions:
+  MQTT_PREFIX: "ss"
+  MQTT_DEFAULT_ADDRESS: "192.168.1.68"
+  MQTT_DEFAULT_PORT: "1883"
+  # Internal error codes
+  ERROR_NO: "0"
+  ERROR_WIFI: "1"
+  ERROR_MQTT: "2"
+
+globals:
+  # CONFIGURABLE BY THE USER #
+  - id: mqtt_broker_address
+    type: std::string
+    restore_value: yes
+    max_restore_data_length: 254
+    initial_value: '"${MQTT_DEFAULT_ADDRESS}"'
+  - id: mqtt_broker_port
+    type: uint16_t
+    restore_value: yes
+    initial_value: ${MQTT_DEFAULT_PORT}
+  - id: mqtt_username
+    type: std::string
+    restore_value: yes
+    max_restore_data_length: 254
+    initial_value: '"admin"'
+  - id: mqtt_password
+    type: std::string
+    restore_value: yes
+    max_restore_data_length: 254
+    initial_value: '"admin"'
+  # INTERNAL #
+  - id: ota_url
+    type: std::string
+    restore_value: no
+  - id: mqtt_initial_connection
+    type: bool
+    restore_value: no
+    initial_value: "false"
+  - id: mqtt_discovery_required
+    type: bool
+    restore_value: yes
+    initial_value: "true"
+  - id: last_exec_error
+    type: uint8_t
+    restore_value: yes
+    initial_value: ${ERROR_NO}
+
 mqtt:
   id: mqtt_id
   broker: "127.0.0.1"  # Configured by globals
@@ -34,3 +81,145 @@ wifi:
   ssid: "ssid"
   password: "password"
   fast_connect: True
+
+script:
+  - id: on_wifi_disconnect
+    then:
+      # Skip disconnect script if configuring the Wi-Fi
+      - if:
+          condition:
+            - lambda: ! return id(device_setup_state) == ${SETUP_STATE_WIFI_CONFIG};
+          then:
+            - script.stop: on_wifi_disconnect
+      - switch.turn_on: prevent_deep_sleep
+      - script.stop: execute_ble_server
+      - script.stop: on_mqtt_disconnect
+      # Open BLE connection for setup
+      - ble.enable
+      - wait_until:
+          ble.enabled
+      # Display LED status
+      - light.turn_on: led_status
+      - light.control: 
+          id: led_status
+          effect: "wifi_disconnect_effect"
+      # Start error sleep timeout if the error comes after a sleep
+      - if:
+          condition:
+            - lambda: ! return esp_sleep_get_wakeup_cause() == ESP_SLEEP_WAKEUP_TIMER;
+          then:
+            - script.execute: send_to_error_deep_sleep_after_timeout
+      - switch.turn_off: prevent_deep_sleep
+      - lambda: ! id(last_exec_error) = ${ERROR_WIFI};
+      # Wait for WiFi to be connected
+      - wait_until:
+          wifi.connected
+      # Housekeeping
+      - script.stop: send_to_error_deep_sleep_after_timeout
+      - light.turn_off: led_status
+      # Call main execution
+      - script.execute: main_script
+
+  - id: on_mqtt_disconnect
+    # TODO: Do not start BLE, it will waste energy, same for WiFi
+    then:
+      # Skip disconnect script if configuring the MQTT
+      - if:
+          condition:
+            - lambda: ! return id(device_setup_state) == ${SETUP_STATE_MQTT_CONFIG} || id(device_setup_state) == ${SETUP_STATE_WIFI_CONFIG};
+          then:
+            - script.stop: on_mqtt_disconnect
+      - switch.turn_on: prevent_deep_sleep
+      - script.wait: on_wifi_disconnect
+      - script.stop: execute_ble_server
+      # Open BLE connection for setup
+      - ble.enable
+      - wait_until:
+          ble.enabled
+      # Display LED status
+      - light.turn_on: led_status
+      - light.control: 
+          id: led_status
+          effect: "mqtt_disconnect_effect"
+      # Start error sleep timeout if the error comes after a sleep
+      - if:
+          condition:
+            - lambda: ! return esp_sleep_get_wakeup_cause() == ESP_SLEEP_WAKEUP_TIMER;
+          then:
+            - script.execute: send_to_error_deep_sleep_after_timeout
+      - switch.turn_off: prevent_deep_sleep
+      - lambda: ! id(last_exec_error) = ${ERROR_MQTT};
+      # Wait for MQTT to be connected
+      - wait_until:
+          mqtt.connected
+      # Log
+      # Housekeeping
+      - script.stop: send_to_error_deep_sleep_after_timeout
+      - light.turn_off: led_status
+      # Call main execution
+      - script.execute: main_script
+
+  - id: ota_update
+    then:
+      - switch.turn_on: prevent_deep_sleep
+      # Get the OTA URL
+      - lambda: |-
+            id(mqtt_id).subscribe("${MQTT_PREFIX}/f/u", [=](const std::string &topic, const std::string &payload) {
+              id(ota_url) = payload;
+            }, 1);
+      # Wait until the OTA URL is defined
+      - wait_until:
+        - lambda: ! return !id(ota_url).empty();
+      # Call OTA HTTP update
+      - ota.http_request.flash:
+          url: !lambda return id(ota_url) + "?h=${HARDWARE_VERSION}&ex=bin";
+          md5_url: !lambda return id(ota_url) + "?h=${HARDWARE_VERSION}&ex=md5";
+
+  - id: mqtt_setup
+    then:
+      # Setup MQTT connection
+      - lambda: |-
+          uint8_t mac[6];
+          get_mac_address_raw(mac);
+          std::string mac_base64 = base64_encode(mac, 6);
+          // Convert to base64URL
+          for (char &c : mac_base64) {
+              if (c == '+') c = '-';
+              else if (c == '/') c = '_';
+          }
+          id(mqtt_id).set_topic_prefix("${MQTT_PREFIX}/" + mac_base64, "");
+          id(mqtt_id).set_broker_address(id(mqtt_broker_address));
+          id(mqtt_id).set_broker_port(id(mqtt_broker_port));
+          id(mqtt_id).set_username(id(mqtt_username));
+          id(mqtt_id).set_password(id(mqtt_password));
+          if (!id(mqtt_discovery_required)) { id(mqtt_id).disable_discovery(); }
+      # These subscriptions are here so they have priority over all other subscriptions
+      # Avoid sending discovery messages on every startup if already present
+      # TODO: Subscribe before startup, but publish afterwards
+      - if:
+          condition:
+            - lambda: ! return id(mqtt_discovery_required);
+          then:
+            - mqtt.publish:
+                topic: !lambda return id(mqtt_id).get_topic_prefix() + "/d";
+                qos: 1
+                payload: "1"
+                retain: True
+            - lambda: |-
+                id(mqtt_discovery_required) = false;
+                id(mqtt_initial_connection) = true;
+          else:
+            - lambda: |-
+                id(mqtt_discovery_required) = true; // By default discovery is required until a message is received
+                id(mqtt_id).subscribe(id(mqtt_id).get_topic_prefix() + "/d", [=](const std::string &topic, const std::string &payload) {
+                    id(mqtt_discovery_required) = payload != "1";
+                }, 1);
+      # Check for OTA
+      - lambda: |-
+          id(mqtt_id).subscribe("${MQTT_PREFIX}/f/${HARDWARE_VERSION}", [=](const std::string &topic, const std::string &payload) {
+              if (payload.compare("${FIRMWARE_VERSION}") != 0) {
+                id(ota_update)->execute();
+              }
+          }, 1);
+      - mqtt.enable
+      - wait_until: mqtt.connected

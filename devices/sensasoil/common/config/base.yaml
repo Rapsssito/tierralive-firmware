@@ -1,3 +1,7 @@
+substitutions:
+  # ESPHome minimum version (kept in sync with esphome.version)
+  ESPHOME_MIN_VERSION: !include ../../../../esphome.version
+
 esphome:
   name: "sensasoil_v${HARDWARE_VERSION_UNDERSCORE}"
   friendly_name: "SensaSoil v${HARDWARE_VERSION}"
@@ -41,5 +45,17 @@ esp32:
       CONFIG_COMPILER_OPTIMIZATION_SIZE: y
       CONFIG_ESPTOOLPY_FLASHSIZE_4MB: y
 
-deep_sleep:
-  id: deep_sleep_1
+script:
+  - id: main_script
+    then:
+      - script.execute: refresh_sensors_script
+      - script.wait: refresh_sensors_script
+      - if:
+          condition:
+            - lambda: ! return esp_reset_reason() == ESP_RST_UNKNOWN || esp_reset_reason() == ESP_RST_POWERON || esp_reset_reason() == ESP_RST_USB || esp_reset_reason() == ESP_RST_JTAG;
+          then:
+            # Start BLE server if waked up by power on
+            - script.execute: execute_ble_server
+            - script.wait: execute_ble_server
+      - lambda: ! id(last_exec_error) = ${ERROR_NO};
+      - script.execute: safe_send_to_deep_sleep

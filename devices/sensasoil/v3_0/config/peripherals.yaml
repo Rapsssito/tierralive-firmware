@@ -1,3 +1,10 @@
+globals:
+  # INTERNAL #
+  - id: power_peripherals_time
+    type: unsigned long
+    restore_value: no
+    initial_value: "0"
+
 output:
   - platform: ledc
     id: led_status_output_internal
