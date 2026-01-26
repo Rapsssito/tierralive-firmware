@@ -118,6 +118,7 @@ script:
       - script.execute: main_script
 
   - id: on_mqtt_disconnect
+    # TODO: Improve this to not restart everything when BLE is active
     # TODO: Do not start BLE, it will waste energy, same for WiFi
     then:
       # Skip disconnect script if configuring the MQTT
@@ -221,7 +222,7 @@ script:
         # Update last update timestamp
         - text_sensor.template.publish:
             id: last_update_id
-            state: !lambda return std::to_string(millis());
+            state: !lambda return std::to_string(esp_random());
         # Listen to the final state being published
         - wait_until:
             condition:
