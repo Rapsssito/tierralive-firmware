@@ -11,7 +11,7 @@ ota:
 script:
   - id: ota_update
     then:
-      # Get the OTA URL
+      # TODO: Use HTTP instead of MQTT for OTA URL retrieval
       - lambda: |-
             id(mqtt_id).subscribe("${MQTT_PREFIX}/f/u", [=](const std::string &topic, const std::string &payload) {
               id(ota_url) = payload;

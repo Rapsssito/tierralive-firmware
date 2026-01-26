@@ -3,3 +3,4 @@ node_modules/
 .esphome
 secrets.yaml
 dist/
+*_debug

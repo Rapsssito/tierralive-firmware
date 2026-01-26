@@ -37,6 +37,9 @@ esphome:
         - script.wait: check_initial_connection
         - script.execute: main_script
 
+mdns:
+  disabled: true
+
 esp32:
   board: esp32-c3-devkitm-1
   variant: ESP32C3

@@ -11,6 +11,10 @@ DEVICE_CONFIGS=()
 while IFS= read -r -d '' config_file; do
 	device_conf_path="${config_file#${ROOT_DIR}/devices/}"
 	device_conf_path="${device_conf_path%/config/main.yaml}"
+	# Skip debug configs
+	if [[ "${device_conf_path}" == *_debug ]]; then
+		continue
+	fi
 	DEVICE_CONFIGS+=("${device_conf_path}")
 done < <(find "${ROOT_DIR}/devices" -type f -name main.yaml -path "*/config/main.yaml" -print0 | sort -z)
 
