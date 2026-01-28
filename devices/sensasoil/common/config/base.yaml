@@ -35,6 +35,9 @@ esphome:
         - script.wait: mqtt_setup
         - script.execute: check_initial_connection
         - script.wait: check_initial_connection
+        # TODO: Only check every X resets
+        - script.execute: check_ota
+        - script.wait: check_ota
         - script.execute: main_script
 
 mdns:

@@ -1,5 +1,10 @@
+substitutions:
+  OTA_URL: "https://github.com/Rapsssito/tierralive-firmware/releases/tag/@tierralive-firmware/sensasoil-v${HARDWARE_VERSION_FLAT}@latest"
+
 http_request:
+  verify_ssl: false
   useragent: SensaSoil_${HARDWARE_VERSION}/${FIRMWARE_VERSION}
+  watchdog_timeout: 60s
 
 ota:
   - platform: http_request
@@ -9,17 +14,24 @@ ota:
       - script.execute: main_script
 
 script:
+  - id: check_ota
+    then:
+      # Call HTTP request to check for new firmware version
+      - http_request.get:
+          url: "${OTA_URL}/sensasoil-v${HARDWARE_VERSION_FLAT}.version.txt"
+          capture_response: true
+          max_response_buffer_size: 64
+          on_response:
+            then:
+              - lambda: |-
+                  std::string remote_version = body.c_str();
+                  remote_version.erase(remote_version.find_last_not_of(" \n\r\t")+1);
+                  if (remote_version != FIRMWARE_VERSION) {
+                    id(ota_update)->execute();
+                  }
   - id: ota_update
     then:
-      # TODO: Use HTTP instead of MQTT for OTA URL retrieval
-      - lambda: |-
-            id(mqtt_id).subscribe("${MQTT_PREFIX}/f/u", [=](const std::string &topic, const std::string &payload) {
-              id(ota_url) = payload;
-            }, 1);
-      # Wait until the OTA URL is defined
-      - wait_until:
-        - lambda: ! return !id(ota_url).empty();
       # Call OTA HTTP update
       - ota.http_request.flash:
-          url: !lambda return id(ota_url) + "?h=${HARDWARE_VERSION}&ex=bin";
-          md5_url: !lambda return id(ota_url) + "?h=${HARDWARE_VERSION}&ex=md5";
+          url: "${OTA_URL}/sensasoil-v${HARDWARE_VERSION_FLAT}.factory.bin"
+          md5_url: "${OTA_URL}/sensasoil-v${HARDWARE_VERSION_FLAT}.factory.bin.md5"

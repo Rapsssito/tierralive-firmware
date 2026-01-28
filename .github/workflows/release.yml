@@ -72,7 +72,7 @@ jobs:
           for TAG in $(echo "$TAGS" | jq -r '.[]'); do
             echo "Compiling artifacts for tag: $TAG"
 
-            # Extract package name from tag (e.g., @tierralive-firmware/sensasoil_v3_0@0.0.1 -> @tierralive-firmware/sensasoil_v3_0)
+            # Extract package name from tag (e.g., @tierralive-firmware/sensasoil_v3-0@0.0.1 -> @tierralive-firmware/sensasoil_v3-0)
             PKG_NAME=${TAG%@*}
 
             # Find package location
@@ -91,11 +91,11 @@ jobs:
             fi
 
             # Get the path after 'devices/' to use as DEVICE_CONF_PATH
-            DEVICE_CONF_PATH=${PKG_PATH#*/devices/}  # e.g., sensasoil/v3_0
+            DEVICE_CONF_PATH=${PKG_PATH#*/devices/}  # e.g., sensasoil/v3-0
 
             # Compile the device firmware
             # Get the artifact base name for later use (use the stuff after the slash in the package name)
-            ARTIFACT_BASE=${PKG_NAME#*/}  # e.g., sensasoil_v3_0
+            ARTIFACT_BASE=${PKG_NAME#*/}  # e.g., sensasoil-v3-0
             npm run compile-device ${DEVICE_CONF_PATH} dist/${ARTIFACT_BASE}
           done
 
