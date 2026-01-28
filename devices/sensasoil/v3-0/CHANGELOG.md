@@ -3,6 +3,12 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [0.2.0](https://github.com/Rapsssito/tierralive-firmware/compare/@tierralive-firmware/sensasoil-v3-0@0.1.0...@tierralive-firmware/sensasoil-v3-0@0.2.0) (2026-01-28)
+
+### Features
+
+* add HTTP OTA ([f3d26f0](https://github.com/Rapsssito/tierralive-firmware/commit/f3d26f01057a0c11cef3fdc14e054b03a8ee0e17))
+
 ## [0.1.0](https://github.com/Rapsssito/tierralive-firmware/compare/@tierralive-firmware/sensasoil-v3-0@0.0.3...@tierralive-firmware/sensasoil-v3-0@0.1.0) (2026-01-23)
 
 ### Features
