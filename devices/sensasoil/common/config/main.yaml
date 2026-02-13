@@ -1,0 +1,7 @@
+packages:
+  base: !include base.yaml
+  entities: !include entities.yaml
+  deep_sleep: !include deep_sleep.yaml
+  ble: !include ble.yaml
+  network: !include network.yaml
+  ota: !include ota.yaml
