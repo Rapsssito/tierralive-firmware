@@ -1,16 +1,20 @@
 substitutions:
-  OTA_URL: "https://github.com/Rapsssito/tierralive-firmware/releases/tag/@tierralive-firmware/sensasoil-v${HARDWARE_VERSION_FLAT}@latest"
+  OTA_URL: "https://github.com/Rapsssito/tierralive-firmware/releases/download/@tierralive-firmware/sensasoil-v${HARDWARE_VERSION_FLAT}@latest"
 
 http_request:
-  verify_ssl: false
+  verify_ssl: true
   useragent: SensaSoil_${HARDWARE_VERSION}/${FIRMWARE_VERSION}
   watchdog_timeout: 60s
+  timeout: 50s
+  buffer_size_rx: 1024
+  buffer_size_tx: 1024
 
 ota:
   - platform: http_request
     on_end:
       - lambda: ! id(mqtt_initial_connection_setup) = true;
     on_error:
+      # TODO: Update error
       - script.execute: main_script
 
 script:
@@ -20,15 +24,22 @@ script:
       - http_request.get:
           url: "${OTA_URL}/sensasoil-v${HARDWARE_VERSION_FLAT}.version.txt"
           capture_response: true
-          max_response_buffer_size: 64
+          max_response_buffer_size: 10
           on_response:
             then:
-              - lambda: |-
-                  std::string remote_version = body.c_str();
-                  remote_version.erase(remote_version.find_last_not_of(" \n\r\t")+1);
-                  if (remote_version != "${FIRMWARE_VERSION}") {
-                    id(ota_update)->execute();
-                  }
+              - if:
+                  condition:
+                    and:
+                      - lambda: 'return response->status_code >= 200 && response->status_code < 400;'
+                      - lambda: |-
+                              std::string remote_version = body.c_str();
+                              remote_version.erase(remote_version.find_last_not_of(" \n\r\t")+1);
+                              return remote_version != "${FIRMWARE_VERSION}";
+                  then:
+                    - delay: 1s
+                    - script.execute: ota_update
+                       
+# TODO: Add error for OTA check failure
   - id: ota_update
     then:
       # Call OTA HTTP update
