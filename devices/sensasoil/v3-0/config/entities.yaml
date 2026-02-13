@@ -221,7 +221,7 @@ light:
           max_brightness: 100%
       - pulse:
           # Pulse slowly every 4 seconds
-          name: "manual_ble_server_effect"
+          name: "ble_status_effect"
           transition_length: 2s
           update_interval: 2s
           min_brightness: 40%

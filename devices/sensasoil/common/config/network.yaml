@@ -100,13 +100,11 @@ script:
           id(start_script)->stop();
           // This has priority over MQTT disconnect, so stop it to avoid conflicts
           id(on_mqtt_disconnect)->stop();
-      # Display LED status
-      - light.turn_on: led_status
-      - light.control: 
-          id: led_status
-          effect: "wifi_disconnect_effect"
-      # Start error sleep timeout if the error comes after a sleep
-      - lambda: |-
+          // Display led status
+          auto call = id(led_status)->turn_on();
+          call.set_effect("wifi_disconnect_effect");
+          call.perform();
+          // Start error sleep timeout if the error comes after a sleep
           if (esp_sleep_get_wakeup_cause() == ESP_SLEEP_WAKEUP_TIMER) {
             id(send_to_deep_sleep)->execute(${DELAY_ERROR_WIFI_MS}, ${SLEEP_ERROR_WIFI_MS});
           }
@@ -115,30 +113,28 @@ script:
       - wait_until:
           wifi.connected
       # Housekeeping
-      - script.stop: send_to_deep_sleep
-      - light.turn_off: led_status
-      # Restart main execution
-      - script.execute: start_script
+      - lambda: |-
+          id(send_to_deep_sleep)->stop();
+          auto call = id(led_status)->turn_off();
+          call.perform();
+          id(start_script)->execute();
 
   - id: on_mqtt_disconnect
     then:
       - lambda: |-
-          // Skip disconnect script if configuring MQTT
-          if (id(device_setup_state) == ${SETUP_STATE_MQTT_CONFIG} || id(device_setup_state) == ${SETUP_STATE_WIFI_CONFIG}) {
+          // Skip disconnect script if configuring MQTT or on_wifi_disconnect is running
+          if (id(device_setup_state) == ${SETUP_STATE_MQTT_CONFIG} || id(device_setup_state) == ${SETUP_STATE_WIFI_CONFIG} || id(on_wifi_disconnect)->is_running()) {
             id(on_mqtt_disconnect)->stop();
             return;
           }
           ESP_LOGE("on_mqtt_disconnect", "MQTT disconnected");
           // Stop start script to avoid conflicts with the disconnect scripts
           id(start_script)->stop();
-      - script.wait: on_wifi_disconnect
-      # Display LED status
-      - light.turn_on: led_status
-      - light.control: 
-          id: led_status
-          effect: "mqtt_disconnect_effect"
-      # Start error sleep timeout if the error comes after a sleep
-      - lambda: |-
+          // Display led status
+          auto call = id(led_status)->turn_on();
+          call.set_effect("mqtt_disconnect_effect");
+          call.perform();
+          // Start error sleep timeout if the error comes after a sleep
           if (esp_sleep_get_wakeup_cause() == ESP_SLEEP_WAKEUP_TIMER) {
             id(send_to_deep_sleep)->execute(${DELAY_ERROR_MQTT_MS}, ${SLEEP_ERROR_MQTT_MS});
           }
@@ -147,10 +143,11 @@ script:
       - wait_until:
           mqtt.connected
       # Housekeeping
-      - script.stop: send_to_deep_sleep
-      - light.turn_off: led_status
-      # Restart main execution
-      - script.execute: start_script
+      - lambda: |-
+          id(send_to_deep_sleep)->stop();
+          auto call = id(led_status)->turn_off();
+          call.perform();
+          id(start_script)->execute();
 
   - id: network_setup
     then:

@@ -18,6 +18,8 @@ substitutions:
   SETUP_STATE_INIT: "0"
   SETUP_STATE_WIFI_CONFIG: "1"
   SETUP_STATE_MQTT_CONFIG: "2"
+  # Timeouts
+  DELAY_BLE_SERVER_CLOSE_MS: "5 * 60 * 1000"
 
 globals:
   # INTERNAL #
@@ -220,6 +222,7 @@ esp32_ble_server:
 
 script:
   - id: execute_ble_server
+    mode: restart
     then:
       # Turn on BLE
       - lambda: |-
@@ -230,14 +233,12 @@ script:
       - wait_until:
           ble.enabled
       # Display LED status
-      - light.turn_on: led_status
-      - light.control: 
+      - light.turn_on:
           id: led_status
-          effect: "manual_ble_server_effect"
-      # TODO: Avoid hardcoded values for the timeout
+          effect: "ble_status_effect"
       # If the last communication was more than 5 minutes ago, close the server
       - wait_until:
-          lambda: ! return millis() - id(last_ble_communication_timestamp) >= 5 * 60 * 1000;
+          lambda: ! return millis() - id(last_ble_communication_timestamp) >= ${DELAY_BLE_SERVER_CLOSE_MS};
       - light.turn_off: led_status
 
   - id: improv_wifi_configure
