@@ -1,5 +1,5 @@
 packages:
-  sensasoil_common_main: !include ../../common/config/main.yaml
+  sensasoil_common: !include ../../common/config/common.yaml
   entities: !include entities.yaml
 
 substitutions:
