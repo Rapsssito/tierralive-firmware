@@ -3,6 +3,16 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [0.2.1](https://github.com/Rapsssito/tierralive-firmware/compare/@tierralive-firmware/sensasoil-common@0.2.0...@tierralive-firmware/sensasoil-common@0.2.1) (2026-02-13)
+
+### Bug Fixes
+
+* complete OTA error handling ([4c8508b](https://github.com/Rapsssito/tierralive-firmware/commit/4c8508be3ab7d6f92771e939e9e84adc0ef038c7))
+* fix BLE missing LED indication after disconnection ([8fe95f9](https://github.com/Rapsssito/tierralive-firmware/commit/8fe95f9a039eb5f6e7da746b8f6039bddffa4ab3))
+* fix missing substitutions ([0acd21a](https://github.com/Rapsssito/tierralive-firmware/commit/0acd21a556a5c6e805221cac9c1cf134631cffc2))
+* fix OTA HTTP url ([2243295](https://github.com/Rapsssito/tierralive-firmware/commit/22432955e661d24e023cb37a87ebcab574811459))
+* reduce RAM usage ([c76d735](https://github.com/Rapsssito/tierralive-firmware/commit/c76d7354e713890b3e05ca0f90f14c6589e4433f))
+
 ## [0.2.0](https://github.com/Rapsssito/tierralive-firmware/compare/@tierralive-firmware/sensasoil-common@0.1.0...@tierralive-firmware/sensasoil-common@0.2.0) (2026-01-28)
 
 ### Features
