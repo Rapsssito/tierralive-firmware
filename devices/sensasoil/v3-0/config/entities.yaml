@@ -250,11 +250,10 @@ script:
   - id: refresh_sensors_script
     then:
       # Turn on peripheral power if not already
-      - if:
-          condition:
-            switch.is_off: power_sensors
-          then:
-            - switch.turn_on: power_sensors
+      - lambda:
+          if (!id(power_sensors).state) {
+            id(power_sensors)->turn_on();
+          }
       # Publish state for firmware and hardware versions (automatically published only once handled by sensor)
       - text_sensor.template.publish:
           id: firmware_version

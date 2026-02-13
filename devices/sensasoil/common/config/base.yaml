@@ -17,28 +17,9 @@ esphome:
   libraries:
     - improv=https://github.com/rapsssito/extended-improv-sdk-cpp
   on_boot:
-    - priority: 260
-      then:
-        # Wait 30s for WiFi connection
-        - delay: 30s
-        - if:
-            condition:
-              - not:
-                - wifi.connected
-            then:
-              - script.execute: on_wifi_disconnect
-    - priority: 190
-      then:
-        - script.execute: mqtt_setup
     - priority: -100
       then:
-        - script.wait: mqtt_setup
-        - script.execute: check_initial_connection
-        - script.wait: check_initial_connection
-        # TODO: Only check every X resets
-        - script.execute: check_ota
-        - script.wait: check_ota
-        - script.execute: main_script
+        - script.execute: start_script
 
 mdns:
   disabled: true
@@ -54,17 +35,34 @@ esp32:
       CONFIG_ESPTOOLPY_FLASHSIZE_4MB: y
 
 script:
-  - id: main_script
+  - id: start_script
     then:
+      # Start BLE server if waked up by power on
+      - lambda: |-
+          if (esp_reset_reason() == ESP_RST_UNKNOWN || esp_reset_reason() == ESP_RST_POWERON || esp_reset_reason() == ESP_RST_USB || esp_reset_reason() == ESP_RST_JTAG) {
+            id(execute_ble_server)->execute();
+          }
+      # Network
+      - script.execute: network_setup
+      # If network fails, this script will be stopped by the disconnect scripts
+      - script.wait: network_setup
+      # OTA
+      - script.execute: check_ota
+      # TODO: What to do when ota fails?
+      - script.wait: check_ota
+      # MQTT
+      - script.execute: mqtt_setup
+      # If mqtt fails, this script will be stopped by the disconnect scripts
+      - script.wait: mqtt_setup
+      # Check if we need to do the initial connection setup (only if the data is not persisted)
+      - script.execute: perform_initial_connection
+      - script.wait: perform_initial_connection
+      # Sensors
       - script.execute: refresh_sensors_script
       - script.wait: refresh_sensors_script
-      - if:
-          condition:
-            - lambda: ! return esp_reset_reason() == ESP_RST_UNKNOWN || esp_reset_reason() == ESP_RST_POWERON || esp_reset_reason() == ESP_RST_USB || esp_reset_reason() == ESP_RST_JTAG;
-          then:
-            # Start BLE server if waked up by power on
-            - script.execute: execute_ble_server
-            - script.wait: execute_ble_server
-      - lambda: ! id(last_exec_error) = ${ERROR_NONE};
-      - lambda: ! id(mqtt_initial_connection_setup) = false;
-      - script.execute: deep_sleep_wait_mqtt
+      # Wait in case the BLE server is still running
+      - script.wait: execute_ble_server
+      - lambda: |-
+          id(last_exec_error) = ${ERROR_NONE};
+          id(mqtt_initial_connection_setup) = false;
+          id(deep_sleep_wait_mqtt)->execute();

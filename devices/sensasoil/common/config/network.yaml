@@ -71,91 +71,97 @@ mqtt:
   # No need for MQTT logs
   log_topic: null
 
-# TODO: change to enable_on_boot false
 wifi:
   id: wificomponent
+  enable_on_boot: false
   ssid: "ssid"
   password: "password"
   fast_connect: True
+  on_disconnect:
+    - script.execute: on_wifi_disconnect
 
 script:
   - id: on_wifi_disconnect
     then:
-      # Skip disconnect script if configuring the Wi-Fi
-      - if:
-          condition:
-            - lambda: ! return id(device_setup_state) == ${SETUP_STATE_WIFI_CONFIG};
-          then:
-            - script.stop: on_wifi_disconnect
-      - script.stop: execute_ble_server
-      - script.stop: on_mqtt_disconnect
-      # Open BLE connection for setup
-      - ble.enable
-      - wait_until:
-          ble.enabled
+      - lambda: |-
+          // Skip disconnect script if configuring WiFi
+          if (id(device_setup_state) == ${SETUP_STATE_WIFI_CONFIG}) {
+            id(on_wifi_disconnect)->stop();
+            return;
+          }
+          ESP_LOGE("on_wifi_disconnect", "WiFi disconnected");
+          // Stop start script to avoid conflicts with the disconnect scripts
+          id(start_script)->stop();
+          // This has priority over MQTT disconnect, so stop it to avoid conflicts
+          id(on_mqtt_disconnect)->stop();
       # Display LED status
       - light.turn_on: led_status
       - light.control: 
           id: led_status
           effect: "wifi_disconnect_effect"
       # Start error sleep timeout if the error comes after a sleep
-      - if:
-          condition:
-            - lambda: ! return esp_sleep_get_wakeup_cause() == ESP_SLEEP_WAKEUP_TIMER;
-          then:
-            - script.execute:
-                id: send_to_deep_sleep
-                delay_ms: 1 * 60 * 1000
-                sleep_duration_ms: 5 * 60 * 1000
-      - lambda: ! id(last_exec_error) = ${ERROR_WIFI};
+      - lambda: |-
+          if (esp_sleep_get_wakeup_cause() == ESP_SLEEP_WAKEUP_TIMER) {
+            id(send_to_deep_sleep)->execute(1 * 60 * 1000, 5 * 60 * 1000);
+          }
+          id(last_exec_error) = ${ERROR_WIFI};
       # Wait for WiFi to be connected
       - wait_until:
           wifi.connected
       # Housekeeping
       - script.stop: send_to_deep_sleep
       - light.turn_off: led_status
-      # Call main execution
-      - script.execute: main_script
+      # Restart main execution
+      - script.execute: start_script
 
   - id: on_mqtt_disconnect
     # TODO: Improve this to not restart everything when BLE is active
-    # TODO: Do not start BLE, it will waste energy, same for WiFi
     then:
-      # Skip disconnect script if configuring the MQTT
-      - if:
-          condition:
-            - lambda: ! return id(device_setup_state) == ${SETUP_STATE_MQTT_CONFIG} || id(device_setup_state) == ${SETUP_STATE_WIFI_CONFIG};
-          then:
-            - script.stop: on_mqtt_disconnect
+      - lambda: |-
+          // Skip disconnect script if configuring MQTT
+          if (id(device_setup_state) == ${SETUP_STATE_MQTT_CONFIG} || id(device_setup_state) == ${SETUP_STATE_WIFI_CONFIG}) {
+            id(on_mqtt_disconnect)->stop();
+            return;
+          }
+          ESP_LOGE("on_mqtt_disconnect", "MQTT disconnected");
+          // Stop start script to avoid conflicts with the disconnect scripts
+          id(start_script)->stop();
       - script.wait: on_wifi_disconnect
-      - script.stop: execute_ble_server
-      # Open BLE connection for setup
-      - ble.enable
-      - wait_until:
-          ble.enabled
       # Display LED status
       - light.turn_on: led_status
       - light.control: 
           id: led_status
           effect: "mqtt_disconnect_effect"
+      # TODO: Change hardcoded values for the error sleep
       # Start error sleep timeout if the error comes after a sleep
-      - if:
-          condition:
-            - lambda: ! return esp_sleep_get_wakeup_cause() == ESP_SLEEP_WAKEUP_TIMER;
-          then:
-            - script.execute:
-                id: send_to_deep_sleep
-                delay_ms: 1 * 60 * 1000
-                sleep_duration_ms: 5 * 60 * 1000
-      - lambda: ! id(last_exec_error) = ${ERROR_MQTT};
+      - lambda: |-
+          if (esp_sleep_get_wakeup_cause() == ESP_SLEEP_WAKEUP_TIMER) {
+            id(send_to_deep_sleep)->execute(1 * 60 * 1000, 5 * 60 * 1000);
+          }
+          id(last_exec_error) = ${ERROR_MQTT};
       # Wait for MQTT to be connected
       - wait_until:
           mqtt.connected
       # Housekeeping
       - script.stop: send_to_deep_sleep
       - light.turn_off: led_status
-      # Call main execution
-      - script.execute: main_script
+      # Restart main execution
+      - script.execute: start_script
+
+  - id: network_setup
+    then:
+      # TODO: When modem, include modem setup
+      - lambda: |-
+          id(wificomponent)->enable();
+      - wait_until:
+          condition:
+            - wifi.connected
+          timeout: 30s
+      - lambda: |-
+          if(id(wificomponent)->is_connected()) {
+            return;
+          }
+          id(on_wifi_disconnect)->execute();
 
   - id: mqtt_setup
     then:
@@ -175,47 +181,36 @@ script:
           id(mqtt_id).set_username(id(mqtt_username));
           id(mqtt_id).set_password(id(mqtt_password));
           if (!id(mqtt_initial_connection_setup)) { id(mqtt_id).disable_discovery(); }
-      # These subscriptions are here so they have priority over all other subscriptions
-      # Add subscription for last message id
-      - lambda: |-
+          // These subscriptions are here so they have priority over all other subscriptions
+          // Add subscription for last message id
           id(mqtt_id).subscribe(id(mqtt_id).get_topic_prefix() + "/id", [=](const std::string &topic, const std::string &payload) {
                 id(received_last_update_id) = payload;
             }, 1);
-      # Check if the data was already persisted in the broker
-      - lambda: |-
+          // Check if the data was already persisted in the broker
           id(mqtt_id).subscribe(id(mqtt_id).get_topic_prefix() + "/i", [=](const std::string &topic, const std::string &payload) {
               id(mqtt_data_persisted) = payload == "1";
           }, 1);
-      - mqtt.enable
+          id(mqtt_id)->enable();
       - wait_until: mqtt.connected
 
-  - id: check_initial_connection
+  - id: perform_initial_connection
     then:
       # Wait a bit to make sure the retained message is received
       - wait_until:
           condition:
             - lambda: ! return id(mqtt_data_persisted);
           timeout: 1s
-      - if:
-          condition:
-            - lambda: ! return !id(mqtt_data_persisted);
-          then:
-            - mqtt.publish:
-                topic: !lambda return id(mqtt_id).get_topic_prefix() + "/i";
-                qos: 1
-                payload: "1"
-                retain: true
-            # If the data was not persisted, mark that the initial connection setup is required
-            - if:
-                condition:
-                  - lambda: ! return !id(mqtt_initial_connection_setup);
-                then:
-                  - lambda: ! id(mqtt_initial_connection_setup) = true;
-                  # Soft reset to send the necessary discovery and diagnostic messages
-                  - script.execute:
-                      id: send_to_deep_sleep
-                      delay_ms: 0
-                      sleep_duration_ms: 100
+      - lambda: |-
+          if (id(mqtt_data_persisted)) {
+            return;
+          }
+          id(mqtt_id)->publish(id(mqtt_id).get_topic_prefix() + "/i", "1", 1, 1, true);
+          // If the data is not persisted, we need to do the initial connection setup
+          if (!id(mqtt_initial_connection_setup)) {
+            id(mqtt_initial_connection_setup) = true;
+            // Soft reset to send the necessary discovery and diagnostic messages
+            id(send_to_deep_sleep)->execute(0, 100);
+          }
 
   - id: deep_sleep_wait_mqtt
     then:
@@ -228,20 +223,12 @@ script:
             condition:
               - lambda: ! return id(last_update_id).state == id(received_last_update_id);
             timeout: 1min
-        - if:
-            condition:
-              - lambda: ! return id(last_update_id).state == id(received_last_update_id);
-            then:
-              # Everything went fine, go to deep sleep
-              - script.execute:
-                  id: send_to_deep_sleep
-                  delay_ms: 0
-                  sleep_duration_ms: !lambda return id(deep_sleep_duration).state * 1000 * 60;
-            else:
-              - lambda: ! id(last_exec_error) = ${ERROR_MQTT_TIMEOUT};
-              # If the message is not received in time, reset
-              - script.execute:
-                  id: send_to_deep_sleep
-                  delay_ms: 0
-                  sleep_duration_ms: 5 * 60 * 1000
-              - script.wait: send_to_deep_sleep
+        - lambda: |-
+            if(id(last_update_id).state == id(received_last_update_id)) {
+              // Everything went fine, go to deep sleep
+              id(send_to_deep_sleep)->execute(0, id(deep_sleep_duration).state * 1000 * 60);
+            } else {
+              id(last_exec_error) = ${ERROR_MQTT_TIMEOUT};
+              // If the message is not received in time, reset with a short deep sleep to avoid blocking the device if something is wrong with the MQTT connection
+              id(send_to_deep_sleep)->execute(0, 5 * 60 * 1000);
+            }

@@ -46,14 +46,10 @@ esp32_ble_server:
   model: SensaSoil_${HARDWARE_VERSION}
   # TODO: Maximum one client
   on_connect:
-    # Update sensors
-    - script.execute: refresh_sensors_script
     - lambda: |-
-        ESP_LOGD("BLE", "Connection from %d", id);
-    - lambda: ! id(last_ble_communication_timestamp) = millis();
-  on_disconnect:
-    - lambda: |-
-        ESP_LOGD("BLE", "Disconnection from %d", id);
+        // Refresh sensors on BLE connection to have updated values
+        id(refresh_sensors_script)->execute();
+        id(last_ble_communication_timestamp) = millis();
   services:
     - uuid: 0x180F
       advertise: false
@@ -225,9 +221,12 @@ esp32_ble_server:
 script:
   - id: execute_ble_server
     then:
-      - lambda: ! id(improv_state) = improv::STATE_AUTHORIZED;
       # Turn on BLE
-      - ble.enable
+      - lambda: |-
+          id(improv_state) = improv::STATE_AUTHORIZED;
+          id(ble_id)->enable();
+          // Reset last BLE communication timestamp
+          id(last_ble_communication_timestamp) = millis();
       - wait_until:
           ble.enabled
       # Display LED status
@@ -235,8 +234,7 @@ script:
       - light.control: 
           id: led_status
           effect: "manual_ble_server_effect"
-      # Reset last BLE communication
-      - lambda: ! id(last_ble_communication_timestamp) = millis();
+      # TODO: Avoid hardcoded values for the timeout
       # If the last communication was more than 5 minutes ago, close the server
       - wait_until:
           lambda: ! return millis() - id(last_ble_communication_timestamp) >= 5 * 60 * 1000;
@@ -285,10 +283,10 @@ script:
           id(mqtt_broker_port) = new_mqtt_broker_port;
           id(mqtt_username) = new_mqtt_username;
           id(mqtt_password) = new_mqtt_password;
-      - script.execute: mqtt_setup
+          id(mqtt_setup)->execute();
       - script.wait: mqtt_setup
-      - script.stop: improv_mqtt_configure_error_timeout
       - lambda: |-
+          id(improv_mqtt_configure_error_timeout)->stop();
           id(device_setup_state) = ${SETUP_STATE_INIT};
           id(improv_state) = improv::STATE_PROVISIONED;
           id(improv_status_characteristic)->notify();
@@ -301,9 +299,9 @@ script:
       old_mqtt_password: std::string
     then:
       - delay: 5min
-      - script.stop: improv_mqtt_configure
-      - script.stop: mqtt_setup
       - lambda: |-
+          id(improv_mqtt_configure)->stop();
+          id(mqtt_setup)->stop();
           id(device_setup_state) = ${SETUP_STATE_INIT};
           id(improv_error_characteristic)->set_value(improv::ERROR_UNABLE_TO_CONNECT);
           id(improv_error_characteristic)->notify();
@@ -313,7 +311,7 @@ script:
           id(mqtt_broker_port) = old_mqtt_broker_port;
           id(mqtt_username) = old_mqtt_username;
           id(mqtt_password) = old_mqtt_password;
-      - script.execute: mqtt_setup
+          id(mqtt_setup)->execute();
 
   - id: improv_wifi_mqtt_show_config
     then:

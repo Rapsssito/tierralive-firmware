@@ -15,7 +15,7 @@ ota:
       - lambda: ! id(mqtt_initial_connection_setup) = true;
     on_error:
       # TODO: Update error
-      - script.execute: main_script
+      - script.execute: start_script
 
 script:
   - id: check_ota
@@ -29,16 +29,19 @@ script:
             then:
               - if:
                   condition:
-                    and:
-                      - lambda: 'return response->status_code >= 200 && response->status_code < 400;'
                       - lambda: |-
-                              std::string remote_version = body.c_str();
-                              remote_version.erase(remote_version.find_last_not_of(" \n\r\t")+1);
-                              return remote_version != "${FIRMWARE_VERSION}";
+                          if (response->status_code >= 200 && response->status_code < 400) {
+                            std::string remote_version = body.c_str();
+                            remote_version.erase(remote_version.find_last_not_of(" \n\r\t")+1);
+                            return remote_version != "${FIRMWARE_VERSION}";
+                          }
+                          return false;
                   then:
+                    # Delay so the HTTP request and sockets are properly closed
                     - delay: 1s
                     - script.execute: ota_update
-                       
+                    - script.wait: ota_update
+
 # TODO: Add error for OTA check failure
   - id: ota_update
     then:
