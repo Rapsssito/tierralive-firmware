@@ -5,6 +5,8 @@ substitutions:
 globals:
   - id: ota_check_count
     type: uint8_t
+    # TODO: Enable again when ESPHome supports it
+    # restore_value: RTC
     restore_value: yes
     initial_value: "0"
 

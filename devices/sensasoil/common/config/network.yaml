@@ -7,6 +7,11 @@ substitutions:
   ERROR_WIFI: "1"
   ERROR_MQTT: "2"
   ERROR_MQTT_TIMEOUT: "3"
+  # Error timeouts
+  DELAY_ERROR_WIFI_MS: "2 * 60 * 1000"
+  DELAY_ERROR_MQTT_MS: "2 * 60 * 1000"
+  SLEEP_ERROR_WIFI_MS: "5 * 60 * 1000"
+  SLEEP_ERROR_MQTT_MS: "5 * 60 * 1000"
 
 globals:
   # CONFIGURABLE BY THE USER #
@@ -102,7 +107,7 @@ script:
       # Start error sleep timeout if the error comes after a sleep
       - lambda: |-
           if (esp_sleep_get_wakeup_cause() == ESP_SLEEP_WAKEUP_TIMER) {
-            id(send_to_deep_sleep)->execute(1 * 60 * 1000, 5 * 60 * 1000);
+            id(send_to_deep_sleep)->execute(${DELAY_ERROR_WIFI_MS}, ${SLEEP_ERROR_WIFI_MS});
           }
           id(last_exec_error) = ${ERROR_WIFI};
       # Wait for WiFi to be connected
@@ -115,7 +120,6 @@ script:
       - script.execute: start_script
 
   - id: on_mqtt_disconnect
-    # TODO: Improve this to not restart everything when BLE is active
     then:
       - lambda: |-
           // Skip disconnect script if configuring MQTT
@@ -132,11 +136,10 @@ script:
       - light.control: 
           id: led_status
           effect: "mqtt_disconnect_effect"
-      # TODO: Change hardcoded values for the error sleep
       # Start error sleep timeout if the error comes after a sleep
       - lambda: |-
           if (esp_sleep_get_wakeup_cause() == ESP_SLEEP_WAKEUP_TIMER) {
-            id(send_to_deep_sleep)->execute(1 * 60 * 1000, 5 * 60 * 1000);
+            id(send_to_deep_sleep)->execute(${DELAY_ERROR_MQTT_MS}, ${SLEEP_ERROR_MQTT_MS});
           }
           id(last_exec_error) = ${ERROR_MQTT};
       # Wait for MQTT to be connected

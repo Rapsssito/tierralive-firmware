@@ -1,5 +1,5 @@
 deep_sleep:
-  id: deep_sleep_1
+  id: deep_sleep_component
 
 script:
   - id: send_to_deep_sleep
@@ -11,5 +11,5 @@ script:
       # For example, used to avoid wasting 15mins trying to connect to MQTT or WiFi
       - delay: !lambda return delay_ms;
       - deep_sleep.enter:
-          id: deep_sleep_1
+          id: deep_sleep_component
           sleep_duration: !lambda return sleep_duration_ms;
