@@ -8,6 +8,7 @@ substitutions:
   SENSASOIL_STATE_ERROR_WIFI: "WIFI"
   SENSASOIL_STATE_ERROR_MQTT: "MQTT"
   SENSASOIL_STATE_ERROR_MQTT_TIMEOUT: "MQTT_TIMEOUT"
+  SENSASOIL_STATE_ERROR_OTA: "OTA"
   # Public error states
   SENSASOIL_STATE_ERROR_NONE: "0"
   SENSASOIL_STATE_ERROR_UNKNOWN: "UNKNOWN"
@@ -90,6 +91,8 @@ text_sensor:
         switch (id(last_exec_error)) {
         case ${ERROR_WIFI}:
         return std::string("${SENSASOIL_STATE_ERROR_WIFI}");
+        case ${ERROR_OTA}:
+        return std::string("${SENSASOIL_STATE_ERROR_OTA}");
         case ${ERROR_MQTT}:
         return std::string("${SENSASOIL_STATE_ERROR_MQTT}");
         case ${ERROR_MQTT_TIMEOUT}:

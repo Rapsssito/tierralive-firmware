@@ -48,7 +48,7 @@ script:
       - script.wait: network_setup
       # OTA
       - script.execute: check_ota
-      # TODO: What to do when ota fails?
+      # If OTA fails, this script will continue to MQTT setup since we assume the network is working
       - script.wait: check_ota
       # MQTT
       - script.execute: mqtt_setup

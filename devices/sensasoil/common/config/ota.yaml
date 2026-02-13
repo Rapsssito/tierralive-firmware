@@ -1,5 +1,12 @@
 substitutions:
   OTA_URL: "https://github.com/Rapsssito/tierralive-firmware/releases/download/@tierralive-firmware/sensasoil-v${HARDWARE_VERSION_FLAT}@latest"
+  CHECK_OTA_INTERVAL: "250" # Number of boots between OTA checks
+
+globals:
+  - id: ota_check_count
+    type: uint8_t
+    restore_value: yes
+    initial_value: "0"
 
 http_request:
   verify_ssl: true
@@ -14,12 +21,23 @@ ota:
     on_end:
       - lambda: ! id(mqtt_initial_connection_setup) = true;
     on_error:
-      # TODO: Update error
-      - script.execute: start_script
+      - lambda: |-
+          id(last_exec_error) = ${ERROR_OTA};
+          // OTA failed, we can assume the network is working since we were able to reach the server
+          // so let the code proceed to set up MQTT and the rest of the system
+          // We keep the check_ota count reset so the next check will be in CHECK_OTA_INTERVAL boots
 
 script:
   - id: check_ota
     then:
+      - lambda: |-
+          // Only check for OTA every X wakeups
+          if (id(ota_check_count) < ${CHECK_OTA_INTERVAL}) {
+            id(ota_check_count)++;
+            id(check_ota)->stop();
+            return;
+          }
+          id(ota_check_count) = 0;
       # Call HTTP request to check for new firmware version
       - http_request.get:
           url: "${OTA_URL}/sensasoil-v${HARDWARE_VERSION_FLAT}.version.txt"
@@ -42,7 +60,6 @@ script:
                     - script.execute: ota_update
                     - script.wait: ota_update
 
-# TODO: Add error for OTA check failure
   - id: ota_update
     then:
       # Call OTA HTTP update
