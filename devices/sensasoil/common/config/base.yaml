@@ -2,6 +2,16 @@ substitutions:
   # ESPHome minimum version (kept in sync with esphome.version)
   ESPHOME_MIN_VERSION: !include ../../../../esphome.version
 
+globals:
+  - id: factory_clean
+    type: bool
+    restore_value: yes
+    initial_value: "true"
+  - id: manual_reset
+    type: bool
+    restore_value: no
+    initial_value: "false"
+
 esphome:
   name: "sensasoil-v${HARDWARE_VERSION_FLAT}"
   friendly_name: "SensaSoil v${HARDWARE_VERSION}"
@@ -19,7 +29,11 @@ esphome:
   on_boot:
     - priority: -100
       then:
-        - script.execute: start_script
+        - lambda: |-
+            id(manual_reset) = esp_reset_reason() == ESP_RST_UNKNOWN || esp_reset_reason() == ESP_RST_POWERON || esp_reset_reason() == ESP_RST_EXT || esp_reset_reason() == ESP_RST_USB || esp_reset_reason() == ESP_RST_JTAG;
+            id(manual_reset) = id(manual_reset) || id(factory_clean);
+            id(factory_clean) = false;
+        - script.execute: main_script
 
 mdns:
   disabled: true
@@ -35,13 +49,18 @@ esp32:
       CONFIG_ESPTOOLPY_FLASHSIZE_4MB: y
 
 script:
-  - id: start_script
+  - id: main_script
+    mode: restart
     then:
       # Start BLE server if waked up by power on
       - lambda: |-
-          if (esp_reset_reason() == ESP_RST_UNKNOWN || esp_reset_reason() == ESP_RST_POWERON || esp_reset_reason() == ESP_RST_USB || esp_reset_reason() == ESP_RST_JTAG) {
-            id(execute_ble_server)->execute();
+          if (id(manual_reset)) {
+            id(enable_ble)->execute();
+            id(serve_ble_server)->execute();
           }
+      # Wait for the BLE server to be ready in case we need it for setup
+      # This won't block if we don't need the BLE server or if it's already ready
+      - script.wait: enable_ble
       # Network
       - script.execute: network_setup
       # If network fails, this script will be stopped by the disconnect scripts
@@ -61,7 +80,7 @@ script:
       - script.execute: refresh_sensors_script
       - script.wait: refresh_sensors_script
       # Wait in case the BLE server is still running
-      - script.wait: execute_ble_server
+      - script.wait: serve_ble_server
       - lambda: |-
           id(last_exec_error) = ${ERROR_NONE};
           id(mqtt_initial_connection_setup) = false;

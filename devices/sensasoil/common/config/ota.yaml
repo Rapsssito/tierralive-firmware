@@ -20,6 +20,8 @@ http_request:
 
 ota:
   - platform: http_request
+    on_begin:
+      - light.turn_off: led_status
     on_end:
       - lambda: ! id(mqtt_initial_connection_setup) = true;
     on_error:

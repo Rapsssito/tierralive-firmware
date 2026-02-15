@@ -28,6 +28,33 @@ globals:
 
 sensor:
   - platform: template
+    id: network_signal
+    name: "Network signal"
+    accuracy_decimals: 2
+    unit_of_measurement: "dBm"
+    state_class: measurement
+    entity_category: "diagnostic"
+    device_class: SIGNAL_STRENGTH
+    state_topic: !lambda 'return (id(diagnostic_mode_enabled) | id(mqtt_initial_connection_setup)) ? id(mqtt_id).get_topic_prefix() + "/n_s" : "";'
+    lambda: |-
+        return id(wifi_signal_db).state;
+    <<: *public_sensor
+  - platform: wifi_signal
+    name: "WiFi signal"
+    id: wifi_signal_db
+    accuracy_decimals: 2
+    update_interval: never
+    internal: true
+  - platform: internal_temperature
+    id: chip_temperature
+    name: "Chip temperature"
+    accuracy_decimals: 1
+    device_class: TEMPERATURE
+    state_class: measurement
+    entity_category: "diagnostic"
+    state_topic: !lambda 'return (id(diagnostic_mode_enabled) | id(mqtt_initial_connection_setup)) ? id(mqtt_id).get_topic_prefix() + "/c_t" : "";'
+    <<: *public_sensor
+  - platform: template
     id: deep_sleep_duration
     name: "Deep sleep duration"
     entity_category: "diagnostic"
@@ -119,3 +146,35 @@ switch:
     subscribe_qos: 1
     state_topic: !lambda return id(mqtt_id).get_topic_prefix() + "/dbg/s";
     command_topic: !lambda return id(mqtt_id).get_topic_prefix() + "/dbg/x";
+
+light:
+  - platform: monochromatic
+    id: led_status
+    name: "Status LED"
+    output: led_status_output_internal  # Must be defined by the device configuration
+    restore_mode: ALWAYS_OFF
+    effects:
+      - pulse:
+          # Blink 2.5 times every second
+          name: "wifi_disconnect_effect"
+          transition_length: 200ms
+          update_interval: 200ms
+          min_brightness: 0%
+          max_brightness: 100%
+      - pulse:
+          # Blink quickly every second
+          name: "mqtt_disconnect_effect"
+          transition_length:
+            on_length: 200ms
+            off_length: 1ms
+          update_interval: 2s
+          min_brightness: 0%
+          max_brightness: 100%
+      - pulse:
+          # Pulse slowly every 4 seconds
+          name: "ble_status_effect"
+          transition_length: 2s
+          update_interval: 2s
+          min_brightness: 40%
+          max_brightness: 100%
+    internal: True

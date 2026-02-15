@@ -29,12 +29,22 @@ globals:
     type: std::string
     restore_value: yes
     max_restore_data_length: 254
-    initial_value: '"admin"'
+    initial_value: '""'
   - id: mqtt_password
     type: std::string
     restore_value: yes
     max_restore_data_length: 254
-    initial_value: '"admin"'
+    initial_value: '""'
+  - id: wifi_ssid
+    type: std::string
+    restore_value: yes
+    max_restore_data_length: 254
+    initial_value: '""'
+  - id: wifi_password
+    type: std::string
+    restore_value: yes
+    max_restore_data_length: 254
+    initial_value: '""'
   # INTERNAL #
   - id: ota_url
     type: std::string
@@ -57,6 +67,8 @@ globals:
     initial_value: '"1"'
 
 mqtt:
+  # TODO: Check if possible clear HA topics after OTA
+  # TODO: Use SSL/TLS
   id: mqtt_id
   broker: "127.0.0.1"  # Configured by globals
   username: "u"  # Configured by globals
@@ -80,8 +92,8 @@ mqtt:
 wifi:
   id: wificomponent
   enable_on_boot: false
-  ssid: "ssid"
-  password: "password"
+  ssid: "s"  # Configured by globals
+  password: "pppppppp"  # Configured by globals
   fast_connect: True
   on_disconnect:
     - script.execute: on_wifi_disconnect
@@ -96,16 +108,18 @@ script:
             return;
           }
           ESP_LOGE("on_wifi_disconnect", "WiFi disconnected");
-          // Stop start script to avoid conflicts with the disconnect scripts
-          id(start_script)->stop();
+          // Stop main script to avoid conflicts with the disconnect scripts
+          id(main_script)->stop();
           // This has priority over MQTT disconnect, so stop it to avoid conflicts
           id(on_mqtt_disconnect)->stop();
-          // Display led status
-          auto call = id(led_status)->turn_on();
-          call.set_effect("wifi_disconnect_effect");
-          call.perform();
-          // Start error sleep timeout if the error comes after a sleep
-          if (esp_sleep_get_wakeup_cause() == ESP_SLEEP_WAKEUP_TIMER) {
+          if (id(manual_reset)) {
+            // Display led status only if the device is being handled
+            // else it would be just uselessly blinking
+            auto call = id(led_status)->turn_on();
+            call.set_effect("wifi_disconnect_effect");
+            call.perform();
+          } else {
+            // Start error sleep timeout if the error comes after a sleep
             id(send_to_deep_sleep)->execute(${DELAY_ERROR_WIFI_MS}, ${SLEEP_ERROR_WIFI_MS});
           }
           id(last_exec_error) = ${ERROR_WIFI};
@@ -117,7 +131,7 @@ script:
           id(send_to_deep_sleep)->stop();
           auto call = id(led_status)->turn_off();
           call.perform();
-          id(start_script)->execute();
+          id(main_script)->execute();
 
   - id: on_mqtt_disconnect
     then:
@@ -128,14 +142,16 @@ script:
             return;
           }
           ESP_LOGE("on_mqtt_disconnect", "MQTT disconnected");
-          // Stop start script to avoid conflicts with the disconnect scripts
-          id(start_script)->stop();
-          // Display led status
-          auto call = id(led_status)->turn_on();
-          call.set_effect("mqtt_disconnect_effect");
-          call.perform();
-          // Start error sleep timeout if the error comes after a sleep
-          if (esp_sleep_get_wakeup_cause() == ESP_SLEEP_WAKEUP_TIMER) {
+          // Stop main script to avoid conflicts with the disconnect scripts
+          id(main_script)->stop();
+          if (id(manual_reset)) {
+            // Display led status only if the device is being handled
+            // else it would be just uselessly blinking
+            auto call = id(led_status)->turn_on();
+            call.set_effect("mqtt_disconnect_effect");
+            call.perform();
+          } else {
+            // Start error sleep timeout if the error comes after a sleep
             id(send_to_deep_sleep)->execute(${DELAY_ERROR_MQTT_MS}, ${SLEEP_ERROR_MQTT_MS});
           }
           id(last_exec_error) = ${ERROR_MQTT};
@@ -147,12 +163,29 @@ script:
           id(send_to_deep_sleep)->stop();
           auto call = id(led_status)->turn_off();
           call.perform();
-          id(start_script)->execute();
+          id(main_script)->execute();
 
   - id: network_setup
     then:
       # TODO: When modem, include modem setup
+      - script.execute: wifi_setup
+      - script.wait: wifi_setup
+
+  - id: wifi_setup
+    then:
       - lambda: |-
+          // If no SSID is configured, directly show the WiFi error
+          if (id(wifi_ssid) == "") {
+            id(on_wifi_disconnect)->execute();
+            id(wifi_setup)->stop();
+            return;
+          }
+          // Setup WiFi connection manually based on the stored SSID
+          wifi::WiFiAP wifi_wifiap_id = wifi::WiFiAP();
+          wifi_wifiap_id.set_ssid(id(wifi_ssid));
+          wifi_wifiap_id.set_password(id(wifi_password));
+          wifi_wifiap_id.set_priority(0);
+          id(wificomponent)->set_sta(wifi_wifiap_id);
           id(wificomponent)->enable();
       - wait_until:
           condition:
@@ -168,6 +201,12 @@ script:
     then:
       # Setup MQTT connection
       - lambda: |-
+          // If no broker address is configured, directly show the MQTT error
+          if (id(mqtt_username) == "") {
+            id(mqtt_setup)->stop();
+            id(on_mqtt_disconnect)->execute();
+            return;
+          }
           uint8_t mac[6];
           get_mac_address_raw(mac);
           std::string mac_base64 = base64_encode(mac, 6);
@@ -192,7 +231,15 @@ script:
               id(mqtt_data_persisted) = payload == "1";
           }, 1);
           id(mqtt_id)->enable();
-      - wait_until: mqtt.connected
+      - wait_until:
+          condition:
+            - mqtt.connected
+          timeout: 30s
+      - lambda: |-
+          if(id(mqtt_id)->is_connected()) {
+            return;
+          }
+          id(on_mqtt_disconnect)->execute();
 
   - id: perform_initial_connection
     then:

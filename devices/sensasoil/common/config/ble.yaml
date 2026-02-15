@@ -27,9 +27,6 @@ globals:
     type: unsigned long
     restore_value: no
     initial_value: "0"
-  - id: improv_buffer
-    type: std::vector<uint8_t>
-    restore_value: no
   - id: improv_state
     type: uint8_t
     restore_value: no
@@ -37,6 +34,24 @@ globals:
     type: uint8_t
     restore_value: no
     initial_value: ${SETUP_STATE_INIT}
+  - id: temp_wifi_ssid
+    type: std::string
+    restore_value: no
+  - id: temp_wifi_password
+    type: std::string
+    restore_value: no
+  - id: temp_mqtt_broker_address
+    type: std::string
+    restore_value: no
+  - id: temp_mqtt_broker_port
+    type: uint16_t
+    restore_value: no
+  - id: temp_mqtt_username
+    type: std::string
+    restore_value: no
+  - id: temp_mqtt_password
+    type: std::string
+    restore_value: no
 
 esp32_ble:
   id: ble_id
@@ -130,21 +145,22 @@ esp32_ble_server:
             then:
               # TODO: Add "INDENTIFY" capabilities
               - lambda: |-
-                  ESP_LOGD("ExtendedImprov", "Characteristic received: %s from %d", std::string(x.begin(), x.end()).c_str(), id);
+                  static std::vector<uint8_t> improv_buffer;
                   id(last_ble_communication_timestamp) = millis();
                   if (x.empty()) return;
-                  id(improv_buffer).insert(id(improv_buffer).end(), x.begin(), x.end());
-                  uint8_t length = id(improv_buffer)[1];
-                  if (id(improv_buffer).size() - 3 == length) {
+                  improv_buffer.insert(improv_buffer.end(), x.begin(), x.end());
+                  ESP_LOGD("ExtendedImprov", "Characteristic received: %s from %d", format_hex_pretty(std::string(improv_buffer.begin(), improv_buffer.end()).c_str()).c_str(), id);
+                  uint8_t length = improv_buffer[1];
+                  if (improv_buffer.size() - 3 == length) {
                     id(improv_error_characteristic)->set_value(improv::ERROR_NONE);
                     id(improv_error_characteristic)->notify();
-                    improv::ImprovCommand command = improv::parse_improv_data(id(improv_buffer));
+                    improv::ImprovCommand command = improv::parse_improv_data(improv_buffer);
                     switch (command.command) {
                       case improv::BAD_CHECKSUM:
                         ESP_LOGW("ExtendedImprov", "Error decoding Improv payload");
                         id(improv_error_characteristic)->set_value(improv::ERROR_INVALID_RPC);
                         id(improv_error_characteristic)->notify();
-                        id(improv_buffer).clear();
+                        improv_buffer.clear();
                         break;
                       case improv::WIFI_SETTINGS: {
                         ESP_LOGD("ExtendedImprov", "Wi-Fi settings received");
@@ -152,13 +168,13 @@ esp32_ble_server:
                           ESP_LOGD("CustomImprov", "Settings received, but not authorized");
                           id(improv_error_characteristic)->set_value(improv::ERROR_NOT_AUTHORIZED);
                           id(improv_error_characteristic)->notify();
-                          id(improv_buffer).clear();
-                          return;
+                          improv_buffer.clear();
+                          break;
                         }
                         id(improv_state) = improv::STATE_PROVISIONING;
                         id(improv_status_characteristic)->notify();
                         id(improv_wifi_configure)->execute(std::string(command.data[0].begin(), command.data[0].end()), std::string(command.data[1].begin(), command.data[1].end()));
-                        id(improv_buffer).clear();
+                        improv_buffer.clear();
                         break;
                       }
                       case improv::CUSTOM: {
@@ -169,8 +185,8 @@ esp32_ble_server:
                               ESP_LOGD("CustomImprov", "MQTT settings received, but not authorized");
                               id(improv_error_characteristic)->set_value(improv::ERROR_NOT_AUTHORIZED);
                               id(improv_error_characteristic)->notify();
-                              id(improv_buffer).clear();
-                              return;
+                              improv_buffer.clear();
+                              break;
                             }
                             ESP_LOGD("ExtendedImprov", "MQTT settings received");
                             id(improv_state) = improv::STATE_PROVISIONING;
@@ -180,6 +196,7 @@ esp32_ble_server:
                           case ${E_IMPROV_FACTORY_RESET_COMMAND_ID}:
                             ESP_LOGD("ExtendedImprov", "Factory reset received");
                             id(factory_reset_button).press();
+                            break;
                           case ${E_IMPROV_MQTT_VIEW_SETTINGS_COMMAND_ID}:
                             ESP_LOGD("ExtendedImprov", "Request of MQTT settings received");
                             id(improv_wifi_mqtt_show_config)->execute();
@@ -192,21 +209,22 @@ esp32_ble_server:
                             ESP_LOGW("ExtendedImprov", "Unknown Improv custom payload");
                             break;
                         }
+                        improv_buffer.clear();
                         break;
                       }
                       case improv::IDENTIFY:
-                        id(improv_buffer).clear();
+                        improv_buffer.clear();
                         ESP_LOGW("ExtendedImprov", "IDENTIFY");
                         break;
                       default:
                         ESP_LOGW("ExtendedImprov", "Unknown Improv payload");
                         id(improv_error_characteristic)->set_value(improv::ERROR_UNKNOWN_RPC);
                         id(improv_error_characteristic)->notify();
-                        id(improv_buffer).clear();
+                        improv_buffer.clear();
                     }
-                  } else if (id(improv_buffer).size() - 2 > length) {
+                  } else if (improv_buffer.size() - 2 > length) {
                     ESP_LOGD("ExtendedImprov", "Too much data received or data malformed; resetting buffer...");
-                    id(improv_buffer).clear();
+                    improv_buffer.clear();
                   } else {
                     ESP_LOGD("ExtendedImprov", "Waiting for split data packets...");
                   }
@@ -221,42 +239,59 @@ esp32_ble_server:
           notify: true
 
 script:
-  - id: execute_ble_server
-    mode: restart
+  - id: enable_ble
     then:
-      # Turn on BLE
-      - lambda: |-
-          id(improv_state) = improv::STATE_AUTHORIZED;
-          id(ble_id)->enable();
-          // Reset last BLE communication timestamp
-          id(last_ble_communication_timestamp) = millis();
+      - ble.enable:
       - wait_until:
           ble.enabled
-      # Display LED status
-      - light.turn_on:
-          id: led_status
-          effect: "ble_status_effect"
+
+  - id: serve_ble_server
+    mode: restart
+    then:
+      - lambda: |-
+          id(improv_state) = improv::STATE_AUTHORIZED;
+          // Reset last BLE communication timestamp
+          id(last_ble_communication_timestamp) = millis();
+          // Display BLE status on LED
+          auto call = id(led_status)->turn_on();
+          call.set_effect("ble_status_effect");
+          call.perform();
+          // Turn on BLE
+          id(enable_ble)->execute();
+      - script.wait: enable_ble
       # If the last communication was more than 5 minutes ago, close the server
       - wait_until:
           lambda: ! return millis() - id(last_ble_communication_timestamp) >= ${DELAY_BLE_SERVER_CLOSE_MS};
-      - light.turn_off: led_status
+      # No need to turn off the LED here since it could override other status effects
+      # Additionally, if the server is closed due to inactivity (and everything is all-right)
+      # the device will turn off inmediately after, so it would be pointless to turn off the LED just before that
 
   - id: improv_wifi_configure
     parameters:
       ssid: std::string
       password: std::string
     then:
-      - lambda: ! id(device_setup_state) = ${SETUP_STATE_WIFI_CONFIG};
+      - lambda: |-
+          id(device_setup_state) = ${SETUP_STATE_WIFI_CONFIG};
+          id(temp_wifi_ssid) = ssid;
+          id(temp_wifi_password) = password;
+          id(on_wifi_disconnect)->stop();
+          id(on_mqtt_disconnect)->stop();
+          auto call = id(led_status)->turn_off();
+          call.perform();
       - wifi.configure:
           ssid: !lambda return ssid;
           password: !lambda return password;
           save: true
-          timeout: 30000ms
+          timeout: 30s
           on_connect:
             - lambda: |-
+                id(wifi_ssid) = id(temp_wifi_ssid);
+                id(wifi_password) = id(temp_wifi_password);
                 id(device_setup_state) = ${SETUP_STATE_INIT};
                 id(improv_state) = improv::STATE_PROVISIONED;
                 id(improv_status_characteristic)->notify();
+                id(main_script)->execute();
           on_error:
             - lambda: |-
                 id(device_setup_state) = ${SETUP_STATE_INIT};
@@ -264,6 +299,7 @@ script:
                 id(improv_error_characteristic)->notify();
                 id(improv_state) = improv::ERROR_UNABLE_TO_CONNECT;
                 id(improv_status_characteristic)->notify();
+                id(on_wifi_disconnect)->execute();
 
   - id: improv_mqtt_configure
     parameters:
@@ -272,14 +308,20 @@ script:
       new_mqtt_username: std::string
       new_mqtt_password: std::string
     then:
-      - script.stop: mqtt_setup
-      - mqtt.disable
+      - lambda: |-
+          id(device_setup_state) = ${SETUP_STATE_MQTT_CONFIG};
+          id(on_mqtt_disconnect)->stop();
+          id(mqtt_setup)->stop();
+          auto call = id(led_status)->turn_off();
+          call.perform();
+          id(mqtt_id)->disable();
       - wait_until:
         - not: mqtt.connected
       - lambda: |-
-          id(mqtt_initial_connection_setup) = true;
-          id(device_setup_state) = ${SETUP_STATE_MQTT_CONFIG};
-          id(improv_mqtt_configure_error_timeout)->execute(id(mqtt_broker_address), id(mqtt_broker_port), id(mqtt_username), id(mqtt_password));
+          id(temp_mqtt_broker_address) = id(mqtt_broker_address);
+          id(temp_mqtt_broker_port) = id(mqtt_broker_port);
+          id(temp_mqtt_username) = id(mqtt_username);
+          id(temp_mqtt_password) = id(mqtt_password);
           id(mqtt_broker_address) = new_mqtt_broker_address;
           id(mqtt_broker_port) = new_mqtt_broker_port;
           id(mqtt_username) = new_mqtt_username;
@@ -287,32 +329,23 @@ script:
           id(mqtt_setup)->execute();
       - script.wait: mqtt_setup
       - lambda: |-
-          id(improv_mqtt_configure_error_timeout)->stop();
+          if (id(mqtt_id)->is_connected()) {
+            id(mqtt_initial_connection_setup) = true;
+            id(improv_state) = improv::STATE_PROVISIONED;
+          } else {
+            // Notify the client about the failure
+            id(improv_error_characteristic)->set_value(improv::ERROR_UNABLE_TO_CONNECT);
+            id(improv_error_characteristic)->notify();
+            id(improv_state) = improv::ERROR_UNABLE_TO_CONNECT;
+            // Revert to previous MQTT settings since the new ones are not working
+            id(mqtt_broker_address) = id(temp_mqtt_broker_address);
+            id(mqtt_broker_port) = id(temp_mqtt_broker_port);
+            id(mqtt_username) = id(temp_mqtt_username);
+            id(mqtt_password) = id(temp_mqtt_password);
+          }
           id(device_setup_state) = ${SETUP_STATE_INIT};
-          id(improv_state) = improv::STATE_PROVISIONED;
           id(improv_status_characteristic)->notify();
-
-  - id: improv_mqtt_configure_error_timeout
-    parameters:
-      old_mqtt_broker_address: std::string
-      old_mqtt_broker_port: uint16_t
-      old_mqtt_username: std::string
-      old_mqtt_password: std::string
-    then:
-      - delay: 5min
-      - lambda: |-
-          id(improv_mqtt_configure)->stop();
-          id(mqtt_setup)->stop();
-          id(device_setup_state) = ${SETUP_STATE_INIT};
-          id(improv_error_characteristic)->set_value(improv::ERROR_UNABLE_TO_CONNECT);
-          id(improv_error_characteristic)->notify();
-          id(improv_state) = improv::ERROR_UNABLE_TO_CONNECT;
-          id(improv_status_characteristic)->notify();
-          id(mqtt_broker_address) = old_mqtt_broker_address;
-          id(mqtt_broker_port) = old_mqtt_broker_port;
-          id(mqtt_username) = old_mqtt_username;
-          id(mqtt_password) = old_mqtt_password;
-          id(mqtt_setup)->execute();
+          id(main_script)->execute();
 
   - id: improv_wifi_mqtt_show_config
     then:

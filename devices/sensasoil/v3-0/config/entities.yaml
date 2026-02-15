@@ -11,24 +11,6 @@ globals:
     initial_value: "0"
 
 sensor:
-  - platform: wifi_signal
-    name: "WiFi signal"
-    id: wifi_signal_db
-    accuracy_decimals: 2
-    state_class: measurement
-    entity_category: "diagnostic"
-    device_class: SIGNAL_STRENGTH
-    state_topic: !lambda 'return (id(diagnostic_mode_enabled) | id(mqtt_initial_connection_setup)) ? id(mqtt_id).get_topic_prefix() + "/w_s" : "";'
-    <<: *public_sensor
-  - platform: internal_temperature
-    id: chip_temperature
-    name: "Chip temperature"
-    accuracy_decimals: 1
-    device_class: TEMPERATURE
-    state_class: measurement
-    entity_category: "diagnostic"
-    state_topic: !lambda 'return (id(diagnostic_mode_enabled) | id(mqtt_initial_connection_setup)) ? id(mqtt_id).get_topic_prefix() + "/c_t" : "";'
-    <<: *public_sensor
   - platform: dht
     pin: GPIO5
     model: DHT22
@@ -198,36 +180,6 @@ output:
     id: led_status_output_internal
     pin: GPIO0
 
-light:
-  - platform: monochromatic
-    id: led_status
-    name: "Status LED"
-    output: led_status_output_internal
-    restore_mode: ALWAYS_OFF
-    effects:
-      - pulse:
-          # Blink 5 times every second
-          name: "mqtt_disconnect_effect"
-          transition_length: 100ms
-          update_interval: 100ms
-          min_brightness: 0%
-          max_brightness: 100%
-      - pulse:
-          # Blink once every second
-          name: "wifi_disconnect_effect"
-          transition_length: 250ms
-          update_interval: 1s
-          min_brightness: 0%
-          max_brightness: 100%
-      - pulse:
-          # Pulse slowly every 4 seconds
-          name: "ble_status_effect"
-          transition_length: 2s
-          update_interval: 2s
-          min_brightness: 40%
-          max_brightness: 100%
-    internal: True
-
 switch:
   - platform: gpio
     id: power_sensors
@@ -258,22 +210,31 @@ script:
       - text_sensor.template.publish:
           id: firmware_version
           state: "${FIRMWARE_VERSION}"
+      - delay: 1ms
       - text_sensor.template.publish:
           id: hardware_version
           state: "${HARDWARE_VERSION}"
+      - delay: 1ms
       # Publish state of non-peripherals
       - component.update: error_state
+      - delay: 1ms
       - binary_sensor.template.publish:
           id: is_battery_charging
           state: !lambda return id(is_charging_internal).state;
+      - delay: 1ms
       - component.update: chip_temperature
       - delay: 1ms
       - component.update: wifi_signal_db
+      - delay: 1ms
+      - component.update: network_signal
+      - delay: 1ms
       - component.update: battery_v
       - delay: 1ms
       - component.update: battery_percentage
+      - delay: 1ms
       # Update time to sleep based on battery level
       - component.update: deep_sleep_duration
+      - delay: 1ms
       # Wait 150ms since power_sensors_time
       - if:
           condition:
@@ -291,4 +252,5 @@ script:
       - switch.turn_off: power_sensors
       # Update template sensors based on the voltage
       - component.update: soil_temperature
+      - delay: 1ms
       - component.update: soil_volumetric_water
