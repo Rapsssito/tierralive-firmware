@@ -202,11 +202,16 @@ script:
           id(on_wifi_disconnect)->execute();
 
   - id: mqtt_setup
+    parameters:
+      mqtt_broker_address: std::string
+      mqtt_broker_port: uint16_t
+      mqtt_username: std::string
+      mqtt_password: std::string
     then:
       # Setup MQTT connection
       - lambda: |-
           // If no broker address is configured, directly show the MQTT error
-          if (id(mqtt_username) == "") {
+          if (mqtt_username == "") {
             id(mqtt_setup)->stop();
             id(on_mqtt_disconnect)->execute();
             return;
@@ -220,16 +225,18 @@ script:
               else if (c == '/') c = '_';
           }
           id(mqtt_id).set_topic_prefix("${MQTT_PREFIX}/" + mac_base64, "");
-          id(mqtt_id).set_broker_address(id(mqtt_broker_address));
-          id(mqtt_id).set_broker_port(id(mqtt_broker_port));
-          id(mqtt_id).set_username(id(mqtt_username));
-          id(mqtt_id).set_password(id(mqtt_password));
+          id(mqtt_id).set_broker_address(mqtt_broker_address);
+          id(mqtt_id).set_broker_port(mqtt_broker_port);
+          id(mqtt_id).set_username(mqtt_username);
+          id(mqtt_id).set_password(mqtt_password);
+          id(mqtt_id).set_client_id(mac_base64);
           if (!id(mqtt_initial_connection_setup)) { id(mqtt_id).disable_discovery(); }
           // These subscriptions are here so they have priority over all other subscriptions
           // Add subscription for last message id
           id(mqtt_id).subscribe(id(mqtt_id).get_topic_prefix() + "/id", [=](const std::string &topic, const std::string &payload) {
                 id(received_update_id) = payload;
             }, 1);
+          // TODO: Use /id to also check if the device is already persisted in the broker
           // Check if the data was already persisted in the broker
           id(mqtt_id).subscribe(id(mqtt_id).get_topic_prefix() + "/i", [=](const std::string &topic, const std::string &payload) {
               id(mqtt_data_persisted) = payload == "1";
@@ -279,9 +286,11 @@ script:
         - lambda: |-
             if(id(current_update_id) == id(received_update_id)) {
               // Everything went fine, go to deep sleep
-              id(send_to_deep_sleep)->execute(0, id(deep_sleep_duration).state * 1000 * 60);
+              id(send_to_deep_sleep)->execute(100, id(deep_sleep_duration).state * 1000 * 60);
             } else {
               id(last_exec_error) = ${ERROR_MQTT_TIMEOUT};
               // If the message is not received in time, reset with a short deep sleep to avoid blocking the device if something is wrong with the MQTT connection
-              id(send_to_deep_sleep)->execute(0, 5 * 60 * 1000);
+              id(send_to_deep_sleep)->execute(100, 5 * 60 * 1000);
             }
+            // As a well behaved device, disconnect from MQTT broker to avoid wasting resources on the broker side while sleeping
+            id(mqtt_id)->disable();

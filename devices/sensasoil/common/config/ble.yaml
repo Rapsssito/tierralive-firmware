@@ -40,18 +40,6 @@ globals:
   - id: temp_wifi_password
     type: std::string
     restore_value: no
-  - id: temp_mqtt_broker_address
-    type: std::string
-    restore_value: no
-  - id: temp_mqtt_broker_port
-    type: uint16_t
-    restore_value: no
-  - id: temp_mqtt_username
-    type: std::string
-    restore_value: no
-  - id: temp_mqtt_password
-    type: std::string
-    restore_value: no
 
 esp32_ble:
   id: ble_id
@@ -321,32 +309,26 @@ script:
       - lambda: |-
           ESP_LOGD("MQTT Config", "Applying new MQTT settings: broker=%s, port=%d, username=%s", new_mqtt_broker_address.c_str(), new_mqtt_broker_port, new_mqtt_username.c_str());
           // Store new settings in temporary variables while we test the connection
-          id(temp_mqtt_broker_address) = id(mqtt_broker_address);
-          id(temp_mqtt_broker_port) = id(mqtt_broker_port);
-          id(temp_mqtt_username) = id(mqtt_username);
-          id(temp_mqtt_password) = id(mqtt_password);
-          id(mqtt_broker_address) = new_mqtt_broker_address;
-          id(mqtt_broker_port) = new_mqtt_broker_port;
-          id(mqtt_username) = new_mqtt_username;
-          id(mqtt_password) = new_mqtt_password;
-          id(mqtt_setup)->execute();
+          id(mqtt_setup)->execute(new_mqtt_broker_address, new_mqtt_broker_port, new_mqtt_username, new_mqtt_password);
       - script.wait: mqtt_setup
       - lambda: |-
           if (id(mqtt_id)->is_connected()) {
             ESP_LOGD("MQTT Config", "Successfully connected with new MQTT settings");
             id(mqtt_initial_connection_setup) = true;
             id(improv_state) = improv::STATE_PROVISIONED;
+            // Update MQTT settings since they are correct
+            id(mqtt_broker_address) = new_mqtt_broker_address;
+            id(mqtt_broker_port) = new_mqtt_broker_port;
+            id(mqtt_username) = new_mqtt_username;
+            id(mqtt_password) = new_mqtt_password;
           } else {
             ESP_LOGE("MQTT Config", "Failed to connect with new MQTT settings");
             // Notify the client about the failure
             id(improv_error_characteristic)->set_value(improv::ERROR_UNABLE_TO_CONNECT);
             id(improv_error_characteristic)->notify();
             id(improv_state) = improv::ERROR_UNABLE_TO_CONNECT;
-            // Revert to previous MQTT settings since the new ones are not working
-            id(mqtt_broker_address) = id(temp_mqtt_broker_address);
-            id(mqtt_broker_port) = id(temp_mqtt_broker_port);
-            id(mqtt_username) = id(temp_mqtt_username);
-            id(mqtt_password) = id(temp_mqtt_password);
+            // Reset MQTT settings to previous values
+            id(mqtt_id)->disable();
           }
           id(device_setup_state) = ${SETUP_STATE_INIT};
           id(improv_status_characteristic)->notify();

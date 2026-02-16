@@ -70,7 +70,12 @@ script:
       # If OTA fails, this script will continue to MQTT setup since we assume the network is working
       - script.wait: check_ota
       # MQTT
-      - script.execute: mqtt_setup
+      - script.execute:
+          id: mqtt_setup
+          mqtt_broker_address: !lambda return id(mqtt_broker_address);
+          mqtt_broker_port: !lambda return id(mqtt_broker_port);
+          mqtt_username: !lambda return id(mqtt_username);
+          mqtt_password: !lambda return id(mqtt_password);
       # If mqtt fails, this script will be stopped by the disconnect scripts
       - script.wait: mqtt_setup
       # Check if we need to do the initial connection setup (only if the data is not persisted)
