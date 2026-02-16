@@ -11,7 +11,7 @@ DEVICE_CONF_PATH="$1"
 SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &> /dev/null && pwd)
 ROOT_DIR="${SCRIPT_DIR}/.."
 
-CONFIG_BASE="${ROOT_DIR}/devices/${DEVICE_CONF_PATH}/config/"
+CONFIG_BASE="${ROOT_DIR}/devices/${DEVICE_CONF_PATH}/config"
 CONFIG_FILE="${CONFIG_BASE}/main.yaml"
 PACKAGE_JSON="${CONFIG_BASE}/../package.json"
 FIRMWARE_VERSION=""
