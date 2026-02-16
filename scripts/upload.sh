@@ -52,3 +52,7 @@ esphome upload ${CONFIG_FILE} || {
     echo "Failed to upload esphome firmware for debug build" >&2
     exit 1
 }
+
+# Show the logs after upload
+echo "Use the following command to view the logs of the device:"
+echo "FIRMWARE_VERSION=${FIRMWARE_VERSION} esphome logs ${CONFIG_FILE}"
