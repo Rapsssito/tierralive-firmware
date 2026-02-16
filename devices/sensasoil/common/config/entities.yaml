@@ -30,7 +30,7 @@ sensor:
   - platform: template
     id: network_signal
     name: "Network signal"
-    accuracy_decimals: 2
+    accuracy_decimals: 0
     unit_of_measurement: "dBm"
     state_class: measurement
     entity_category: "diagnostic"
@@ -42,7 +42,7 @@ sensor:
   - platform: wifi_signal
     name: "WiFi signal"
     id: wifi_signal_db
-    accuracy_decimals: 2
+    accuracy_decimals: 0
     update_interval: never
     internal: true
   - platform: internal_temperature
@@ -84,13 +84,6 @@ text_sensor:
     entity_category: "diagnostic"
     <<: *public_sensor
     state_topic: !lambda 'return id(mqtt_initial_connection_setup) ? id(mqtt_id).get_topic_prefix() + "/hw" : "";'
-  - platform: template
-    id: last_update_id
-    name: "Last update ID"
-    icon: mdi:message-badge
-    entity_category: "diagnostic"
-    <<: *public_sensor
-    state_topic: !lambda return id(mqtt_id).get_topic_prefix() + "/id";
   - platform: template
     id: error_state
     name: "Error state"
@@ -139,9 +132,12 @@ switch:
     name: "Diagnostic mode"
     lambda: ! return id(diagnostic_mode_enabled);
     turn_on_action:
-      - lambda: ! id(diagnostic_mode_enabled) = true;
+      - lambda: |-
+          id(diagnostic_mode_enabled) = true;
+          id(mqtt_initial_connection_setup) = true;
     turn_off_action:
       - lambda: ! id(diagnostic_mode_enabled) = false;
+    entity_category: "config"
     qos: 1
     subscribe_qos: 1
     state_topic: !lambda return id(mqtt_id).get_topic_prefix() + "/dbg/s";

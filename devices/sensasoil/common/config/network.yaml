@@ -61,10 +61,14 @@ globals:
     type: uint8_t
     restore_value: yes
     initial_value: ${ERROR_NONE}
-  - id: received_last_update_id
+  - id: received_update_id
     type: std::string
     restore_value: no
     initial_value: '"1"'
+  - id: current_update_id
+    type: std::string
+    restore_value: no
+    initial_value: '"2"'
 
 mqtt:
   # TODO: Check if possible clear HA topics after OTA
@@ -224,7 +228,7 @@ script:
           // These subscriptions are here so they have priority over all other subscriptions
           // Add subscription for last message id
           id(mqtt_id).subscribe(id(mqtt_id).get_topic_prefix() + "/id", [=](const std::string &topic, const std::string &payload) {
-                id(received_last_update_id) = payload;
+                id(received_update_id) = payload;
             }, 1);
           // Check if the data was already persisted in the broker
           id(mqtt_id).subscribe(id(mqtt_id).get_topic_prefix() + "/i", [=](const std::string &topic, const std::string &payload) {
@@ -262,17 +266,18 @@ script:
 
   - id: deep_sleep_wait_mqtt
     then:
-        # Update last update timestamp
-        - text_sensor.template.publish:
-            id: last_update_id
-            state: !lambda return std::to_string(esp_random());
+        # Publish manually the id
+        - lambda: |-
+            std::string payload = std::to_string(esp_random());
+            id(current_update_id) = payload;
+            id(mqtt_id)->publish(id(mqtt_id).get_topic_prefix() + "/id", payload, 1, true);
         # Listen to the final state being published
         - wait_until:
             condition:
-              - lambda: ! return id(last_update_id).state == id(received_last_update_id);
+              - lambda: ! return id(current_update_id) == id(received_update_id);
             timeout: 1min
         - lambda: |-
-            if(id(last_update_id).state == id(received_last_update_id)) {
+            if(id(current_update_id) == id(received_update_id)) {
               // Everything went fine, go to deep sleep
               id(send_to_deep_sleep)->execute(0, id(deep_sleep_duration).state * 1000 * 60);
             } else {

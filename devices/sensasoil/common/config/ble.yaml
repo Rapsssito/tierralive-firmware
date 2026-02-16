@@ -317,7 +317,10 @@ script:
           id(mqtt_id)->disable();
       - wait_until:
         - not: mqtt.connected
+      - delay: 5s
       - lambda: |-
+          ESP_LOGD("MQTT Config", "Applying new MQTT settings: broker=%s, port=%d, username=%s", new_mqtt_broker_address.c_str(), new_mqtt_broker_port, new_mqtt_username.c_str());
+          // Store new settings in temporary variables while we test the connection
           id(temp_mqtt_broker_address) = id(mqtt_broker_address);
           id(temp_mqtt_broker_port) = id(mqtt_broker_port);
           id(temp_mqtt_username) = id(mqtt_username);
@@ -330,9 +333,11 @@ script:
       - script.wait: mqtt_setup
       - lambda: |-
           if (id(mqtt_id)->is_connected()) {
+            ESP_LOGD("MQTT Config", "Successfully connected with new MQTT settings");
             id(mqtt_initial_connection_setup) = true;
             id(improv_state) = improv::STATE_PROVISIONED;
           } else {
+            ESP_LOGE("MQTT Config", "Failed to connect with new MQTT settings");
             // Notify the client about the failure
             id(improv_error_characteristic)->set_value(improv::ERROR_UNABLE_TO_CONNECT);
             id(improv_error_characteristic)->notify();
