@@ -200,6 +200,7 @@ button:
 
 script:
   - id: refresh_sensors_script
+    mode: restart
     then:
       # Turn on peripheral power if not already
       - lambda:
@@ -210,31 +211,21 @@ script:
       - text_sensor.template.publish:
           id: firmware_version
           state: "${FIRMWARE_VERSION}"
-      - delay: 1ms
       - text_sensor.template.publish:
           id: hardware_version
           state: "${HARDWARE_VERSION}"
-      - delay: 1ms
       # Publish state of non-peripherals
       - component.update: error_state
-      - delay: 1ms
       - binary_sensor.template.publish:
           id: is_battery_charging
           state: !lambda return id(is_charging_internal).state;
-      - delay: 1ms
       - component.update: chip_temperature
-      - delay: 1ms
       - component.update: wifi_signal_db
-      - delay: 1ms
       - component.update: network_signal
-      - delay: 1ms
       - component.update: battery_v
-      - delay: 1ms
       - component.update: battery_percentage
-      - delay: 1ms
       # Update time to sleep based on battery level
       - component.update: deep_sleep_duration
-      - delay: 1ms
       # Wait 150ms since power_sensors_time
       - if:
           condition:
@@ -243,14 +234,10 @@ script:
             - delay: !lambda return 150 - (millis() - id(power_sensors_time));
       # Update peripherals voltage sensors
       - component.update: soil_temperature_v
-      - delay: 1ms
       - component.update: temperature_humidity_sensor
-      - delay: 1ms
       - component.update: soil_volumetric_water_v
-      - delay: 1ms
       # Turn off peripheral power
       - switch.turn_off: power_sensors
       # Update template sensors based on the voltage
       - component.update: soil_temperature
-      - delay: 1ms
       - component.update: soil_volumetric_water

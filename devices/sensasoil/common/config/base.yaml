@@ -87,6 +87,7 @@ script:
       # Wait in case the BLE server is still running
       - script.wait: serve_ble_server
       - lambda: |-
+          ESP_LOGI("main_script", "Main script complete, entering deep sleep");
           id(last_exec_error) = ${ERROR_NONE};
           id(mqtt_initial_connection_setup) = false;
           id(deep_sleep_wait_mqtt)->execute();

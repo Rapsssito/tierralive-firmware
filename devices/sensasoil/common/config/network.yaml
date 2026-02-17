@@ -13,6 +13,9 @@ substitutions:
   DELAY_ERROR_MQTT_MS: "2 * 60 * 1000"
   SLEEP_ERROR_WIFI_MS: "5 * 60 * 1000"
   SLEEP_ERROR_MQTT_MS: "5 * 60 * 1000"
+  # Constants
+  INITIAL_UPDATE_ID: "1"
+  INITIAL_RECEIVED_UPDATE_ID: "0"
 
 globals:
   # CONFIGURABLE BY THE USER #
@@ -64,11 +67,11 @@ globals:
   - id: received_update_id
     type: std::string
     restore_value: no
-    initial_value: '"1"'
+    initial_value: '"${INITIAL_RECEIVED_UPDATE_ID}"'
   - id: current_update_id
     type: std::string
     restore_value: no
-    initial_value: '"2"'
+    initial_value: '"${INITIAL_UPDATE_ID}"'
 
 mqtt:
   # TODO: Check if possible clear HA topics after OTA
@@ -77,6 +80,7 @@ mqtt:
   broker: "127.0.0.1"  # Configured by globals
   username: "u"  # Configured by globals
   password: "p"  # Configured by globals
+  idf_send_async: true
   keepalive: 5min
   # TODO: Enable again when ESPHome supports it
   # clean_session: RTC
@@ -224,6 +228,7 @@ script:
               if (c == '+') c = '-';
               else if (c == '/') c = '_';
           }
+          // TODO: Add option to set the topic prefix
           id(mqtt_id).set_topic_prefix("${MQTT_PREFIX}/" + mac_base64, "");
           id(mqtt_id).set_broker_address(mqtt_broker_address);
           id(mqtt_id).set_broker_port(mqtt_broker_port);
@@ -231,16 +236,16 @@ script:
           id(mqtt_id).set_password(mqtt_password);
           id(mqtt_id).set_client_id(mac_base64);
           if (!id(mqtt_initial_connection_setup)) { id(mqtt_id).disable_discovery(); }
-          // These subscriptions are here so they have priority over all other subscriptions
+          // These subscriptions are here so there is no need to re-subscribe if the session persisted to save bandwidth
           // Add subscription for last message id
           id(mqtt_id).subscribe(id(mqtt_id).get_topic_prefix() + "/id", [=](const std::string &topic, const std::string &payload) {
+                // This is the initial message received after boot, we can use it to check if the data was persisted in the broker
+                if (id(current_update_id) == "${INITIAL_UPDATE_ID}") {
+                  id(mqtt_data_persisted) = true;
+                  return;
+                }
                 id(received_update_id) = payload;
             }, 1);
-          // TODO: Use /id to also check if the device is already persisted in the broker
-          // Check if the data was already persisted in the broker
-          id(mqtt_id).subscribe(id(mqtt_id).get_topic_prefix() + "/i", [=](const std::string &topic, const std::string &payload) {
-              id(mqtt_data_persisted) = payload == "1";
-          }, 1);
           id(mqtt_id)->enable();
       - wait_until:
           condition:
@@ -258,17 +263,11 @@ script:
       - wait_until:
           condition:
             - lambda: ! return id(mqtt_data_persisted);
-          timeout: 1s
+          timeout: 5s
       - lambda: |-
-          if (id(mqtt_data_persisted)) {
-            return;
-          }
-          id(mqtt_id)->publish(id(mqtt_id).get_topic_prefix() + "/i", "1", 1, 1, true);
           // If the data is not persisted, we need to do the initial connection setup
-          if (!id(mqtt_initial_connection_setup)) {
+          if (!id(mqtt_data_persisted)) {
             id(mqtt_initial_connection_setup) = true;
-            // Soft reset to send the necessary discovery and diagnostic messages
-            id(send_to_deep_sleep)->execute(0, 100);
           }
 
   - id: deep_sleep_wait_mqtt
@@ -288,6 +287,7 @@ script:
               // Everything went fine, go to deep sleep
               id(send_to_deep_sleep)->execute(100, id(deep_sleep_duration).state * 1000 * 60);
             } else {
+              ESP_LOGE("deep_sleep_wait_mqtt", "MQTT timeout waiting for update ID to be received. current_update_id: %s, received_update_id: %s", id(current_update_id).c_str(), id(received_update_id).c_str());
               id(last_exec_error) = ${ERROR_MQTT_TIMEOUT};
               // If the message is not received in time, reset with a short deep sleep to avoid blocking the device if something is wrong with the MQTT connection
               id(send_to_deep_sleep)->execute(100, 5 * 60 * 1000);
