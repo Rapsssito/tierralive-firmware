@@ -61,7 +61,7 @@ sensor:
     icon: mdi:clock-outline
     state_class: measurement
     unit_of_measurement: minutes
-    lambda: ! return id(battery_percentage).state;
+    lambda: ! return id(battery_level).state;
     filters:
     - calibrate_linear:
         - 0.00 -> 60 # 1h

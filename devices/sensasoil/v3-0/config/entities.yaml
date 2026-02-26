@@ -51,8 +51,8 @@ sensor:
     state_topic: !lambda 'return (id(diagnostic_mode_enabled) | id(mqtt_initial_connection_setup)) ? id(mqtt_id).get_topic_prefix() + "/b_v" : "";'
     <<: *public_sensor
   - platform: template
-    id: battery_percentage
-    name: "Battery percentage"
+    id: battery_level
+    name: "Battery level"
     unit_of_measurement: "%"
     accuracy_decimals: 0
     state_class: measurement
@@ -76,7 +76,7 @@ sensor:
                   id: ble_battery_level_char
               - ble_server.characteristic.notify:
                   id: ble_battery_status_char
-    state_topic: !lambda return id(mqtt_id).get_topic_prefix() + "/b_p";
+    state_topic: !lambda return id(mqtt_id).get_topic_prefix() + "/b_l";
     <<: *public_sensor
   - platform: adc
     id: soil_temperature_v
@@ -223,7 +223,7 @@ script:
       - component.update: wifi_signal_db
       - component.update: network_signal
       - component.update: battery_v
-      - component.update: battery_percentage
+      - component.update: battery_level
       # Update time to sleep based on battery level
       - component.update: deep_sleep_duration
       # Wait 150ms since power_sensors_time
