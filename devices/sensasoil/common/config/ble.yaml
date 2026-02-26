@@ -44,12 +44,12 @@ globals:
 esp32_ble:
   id: ble_id
   enable_on_boot: False
+  max_connections: 1
 
 esp32_ble_server:
   id: ble_server
   manufacturer: TierraLive
   model: SensaSoil_${HARDWARE_VERSION}
-  # TODO: Maximum one client
   on_connect:
     - lambda: |-
         // Refresh sensors on BLE connection to have updated values
