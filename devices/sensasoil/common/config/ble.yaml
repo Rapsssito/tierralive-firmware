@@ -11,6 +11,8 @@ substitutions:
   E_IMPROV_FACTORY_RESET_COMMAND_ID: "2"
   E_IMPROV_MQTT_VIEW_SETTINGS_COMMAND_ID: "3"
   E_IMPROV_WIFI_VIEW_SETTINGS_COMMAND_ID: "4"
+  E_IMPROV_ENABLE_DIAGNOSTIC_COMMAND_ID: "5"
+  E_IMPROV_MQTT_DISCOVERY_PREFIX_COMMAND_ID: "6"
   # Custom BLE
   CUSTOM_BLE_SERVICE_UUID: "3b351f04-1db6-49f3-b155-cb5d18c80000"
   CUSTOM_BLE_INFO_UUID: "3b351f04-1db6-49f3-b155-cb5d18c80001"
@@ -28,7 +30,7 @@ globals:
     restore_value: no
     initial_value: "0"
   - id: improv_state
-    type: uint8_t
+    type: improv::State
     restore_value: no
   - id: device_setup_state
     type: uint8_t
@@ -46,10 +48,13 @@ esp32_ble:
   enable_on_boot: False
   max_connections: 1
 
+# TODO: Check that improv RPC command flow works
 esp32_ble_server:
   id: ble_server
   manufacturer: TierraLive
   model: SensaSoil_${HARDWARE_VERSION}
+  # TODO: Enable when ESPHome supports it
+  # max_clients: 1
   on_connect:
     - lambda: |-
         // Refresh sensors on BLE connection to have updated values
@@ -131,7 +136,6 @@ esp32_ble_server:
           write: true
           on_write:
             then:
-              # TODO: Add "INDENTIFY" capabilities
               - lambda: |-
                   static std::vector<uint8_t> improv_buffer;
                   id(last_ble_communication_timestamp) = millis();
@@ -140,26 +144,26 @@ esp32_ble_server:
                   ESP_LOGD("ExtendedImprov", "Characteristic received: %s from %d", format_hex_pretty(std::string(improv_buffer.begin(), improv_buffer.end()).c_str()).c_str(), id);
                   uint8_t length = improv_buffer[1];
                   if (improv_buffer.size() - 3 == length) {
-                    id(improv_error_characteristic)->set_value(improv::ERROR_NONE);
+                    id(improv_error_characteristic)->set_value(improv::Error::ERROR_NONE);
                     id(improv_error_characteristic)->notify();
                     improv::ImprovCommand command = improv::parse_improv_data(improv_buffer);
                     switch (command.command) {
                       case improv::BAD_CHECKSUM:
                         ESP_LOGW("ExtendedImprov", "Error decoding Improv payload");
-                        id(improv_error_characteristic)->set_value(improv::ERROR_INVALID_RPC);
+                        id(improv_error_characteristic)->set_value(improv::Error::ERROR_INVALID_RPC);
                         id(improv_error_characteristic)->notify();
                         improv_buffer.clear();
                         break;
                       case improv::WIFI_SETTINGS: {
                         ESP_LOGD("ExtendedImprov", "Wi-Fi settings received");
-                        if (id(improv_state) != improv::STATE_AUTHORIZED) {
-                          ESP_LOGD("CustomImprov", "Settings received, but not authorized");
-                          id(improv_error_characteristic)->set_value(improv::ERROR_NOT_AUTHORIZED);
+                        if (id(improv_state) == improv::State::STATE_PROVISIONING) {
+                          ESP_LOGD("ExtendedImprov", "Settings received, but already provisioning");
+                          id(improv_error_characteristic)->set_value(improv::Error::ERROR_NOT_AUTHORIZED);
                           id(improv_error_characteristic)->notify();
                           improv_buffer.clear();
                           break;
                         }
-                        id(improv_state) = improv::STATE_PROVISIONING;
+                        id(improv_state) = improv::State::STATE_PROVISIONING;
                         id(improv_status_characteristic)->notify();
                         id(improv_wifi_configure)->execute(std::string(command.data[0].begin(), command.data[0].end()), std::string(command.data[1].begin(), command.data[1].end()));
                         improv_buffer.clear();
@@ -169,15 +173,16 @@ esp32_ble_server:
                         ESP_LOGD("ExtendedImprov", "Custom command received");
                         switch(command.data[0][0]) {
                           case ${E_IMPROV_MQTT_CHANGE_SETTINGS_COMMAND_ID}:
-                            if (id(improv_state) != improv::STATE_AUTHORIZED) {
-                              ESP_LOGD("CustomImprov", "MQTT settings received, but not authorized");
-                              id(improv_error_characteristic)->set_value(improv::ERROR_NOT_AUTHORIZED);
+                            if (id(improv_state) == improv::State::STATE_PROVISIONING) {
+                              ESP_LOGD("ExtendedImprov", "MQTT settings received, but not authorized");
+                              id(improv_error_characteristic)->set_value(improv::Error::ERROR_NOT_AUTHORIZED);
                               id(improv_error_characteristic)->notify();
                               improv_buffer.clear();
                               break;
                             }
+                            // TODO: Add tls when ESPHome supports it
                             ESP_LOGD("ExtendedImprov", "MQTT settings received");
-                            id(improv_state) = improv::STATE_PROVISIONING;
+                            id(improv_state) = improv::State::STATE_PROVISIONING;
                             id(improv_status_characteristic)->notify();
                             id(improv_mqtt_configure)->execute(std::string(command.data[1].begin(), command.data[1].end()), bytebuffer::ByteBuffer::wrap(command.data[2]).get_uint16(), std::string(command.data[3].begin(), command.data[3].end()), std::string(command.data[4].begin(), command.data[4].end()));
                             break;
@@ -193,6 +198,26 @@ esp32_ble_server:
                             ESP_LOGD("ExtendedImprov", "Request of WiFi settings received");
                             id(improv_wifi_ble_show_config)->execute();
                             break;
+                          case ${E_IMPROV_ENABLE_DIAGNOSTIC_COMMAND_ID}: {
+                            ESP_LOGD("ExtendedImprov", "Enable diagnostic command received");
+                            bool enable_diagnostic = command.data[1][0] != 0;
+                            if (enable_diagnostic) {
+                              id(diagnostic_mode) = true;
+                              id(mqtt_initial_connection_setup) = true;
+                            } else {
+                              id(diagnostic_mode) = false;
+                            }
+                            id(main_script)->execute();
+                            break;
+                          }
+                          case ${E_IMPROV_MQTT_DISCOVERY_PREFIX_COMMAND_ID}: {
+                            ESP_LOGD("ExtendedImprov", "MQTT discovery prefix command received");
+                            std::string new_prefix(command.data[1].begin(), command.data[1].end());
+                            id(mqtt_discovery_prefix) = new_prefix;
+                            id(mqtt_initial_connection_setup) = true;
+                            id(main_script)->execute();
+                            break;
+                          }
                           default:
                             ESP_LOGW("ExtendedImprov", "Unknown Improv custom payload");
                             break;
@@ -202,11 +227,11 @@ esp32_ble_server:
                       }
                       case improv::IDENTIFY:
                         improv_buffer.clear();
-                        ESP_LOGW("ExtendedImprov", "IDENTIFY");
+                        ESP_LOGW("ExtendedImprov", "IDENTIFY not supported in this device");
                         break;
                       default:
                         ESP_LOGW("ExtendedImprov", "Unknown Improv payload");
-                        id(improv_error_characteristic)->set_value(improv::ERROR_UNKNOWN_RPC);
+                        id(improv_error_characteristic)->set_value(improv::Error::ERROR_UNKNOWN_RPC);
                         id(improv_error_characteristic)->notify();
                         improv_buffer.clear();
                     }
@@ -237,7 +262,7 @@ script:
     mode: restart
     then:
       - lambda: |-
-          id(improv_state) = improv::STATE_AUTHORIZED;
+          id(improv_state) = improv::State::STATE_AUTHORIZED;
           // Reset last BLE communication timestamp
           id(last_ble_communication_timestamp) = millis();
           // Display BLE status on LED
@@ -277,15 +302,15 @@ script:
                 id(wifi_ssid) = id(temp_wifi_ssid);
                 id(wifi_password) = id(temp_wifi_password);
                 id(device_setup_state) = ${SETUP_STATE_INIT};
-                id(improv_state) = improv::STATE_PROVISIONED;
+                id(improv_state) = improv::State::STATE_PROVISIONED;
                 id(improv_status_characteristic)->notify();
                 id(main_script)->execute();
           on_error:
             - lambda: |-
                 id(device_setup_state) = ${SETUP_STATE_INIT};
-                id(improv_error_characteristic)->set_value(improv::ERROR_UNABLE_TO_CONNECT);
+                id(improv_error_characteristic)->set_value(improv::Error::ERROR_UNABLE_TO_CONNECT);
                 id(improv_error_characteristic)->notify();
-                id(improv_state) = improv::ERROR_UNABLE_TO_CONNECT;
+                id(improv_state) = improv::State::STATE_AUTHORIZED;
                 id(improv_status_characteristic)->notify();
                 id(on_wifi_disconnect)->execute();
 
@@ -315,7 +340,7 @@ script:
           if (id(mqtt_id)->is_connected()) {
             ESP_LOGD("MQTT Config", "Successfully connected with new MQTT settings");
             id(mqtt_initial_connection_setup) = true;
-            id(improv_state) = improv::STATE_PROVISIONED;
+            id(improv_state) = improv::State::STATE_PROVISIONED;
             // Update MQTT settings since they are correct
             id(mqtt_broker_address) = new_mqtt_broker_address;
             id(mqtt_broker_port) = new_mqtt_broker_port;
@@ -324,9 +349,9 @@ script:
           } else {
             ESP_LOGE("MQTT Config", "Failed to connect with new MQTT settings");
             // Notify the client about the failure
-            id(improv_error_characteristic)->set_value(improv::ERROR_UNABLE_TO_CONNECT);
+            id(improv_error_characteristic)->set_value(improv::Error::ERROR_UNABLE_TO_CONNECT);
             id(improv_error_characteristic)->notify();
-            id(improv_state) = improv::ERROR_UNABLE_TO_CONNECT;
+            id(improv_state) = improv::State::STATE_AUTHORIZED;
             // Reset MQTT settings to previous values
             id(mqtt_id)->disable();
           }

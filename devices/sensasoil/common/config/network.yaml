@@ -16,6 +16,7 @@ substitutions:
   # Constants
   INITIAL_UPDATE_ID: "1"
   INITIAL_RECEIVED_UPDATE_ID: "0"
+  ID_TOPIC: "id"
 
 globals:
   # CONFIGURABLE BY THE USER #
@@ -38,6 +39,11 @@ globals:
     restore_value: yes
     max_restore_data_length: 254
     initial_value: '""'
+  - id: mqtt_discovery_prefix
+    type: std::string
+    restore_value: yes
+    max_restore_data_length: 64  # ESPHome's MQTT topic prefix limit
+    initial_value: '"homeassistant"'
   - id: wifi_ssid
     type: std::string
     restore_value: yes
@@ -79,6 +85,7 @@ mqtt:
   username: "u"  # Configured by globals
   password: "p"  # Configured by globals
   idf_send_async: true
+  # tls: true  # TODO: again when ESPHome supports it
   # Let's Encrypt ISRG Root X1 Certificate
   certificate_authority: |
     -----BEGIN CERTIFICATE-----
@@ -113,7 +120,7 @@ mqtt:
     emyPxgcYxn/eR44/KJ4EBs+lVDR3veyJm+kXQ99b21/+jh5Xos1AnX5iItreGCc=
     -----END CERTIFICATE-----
   keepalive: 5min
-  # TODO: Enable again when ESPHome supports it
+  # TODO: Enable when ESPHome supports it
   # clean_session: RTC
   enable_on_boot: False
   discover_ip: False
@@ -259,17 +266,22 @@ script:
               if (c == '+') c = '-';
               else if (c == '/') c = '_';
           }
-          // TODO: Add option to set the topic prefix
+          // TODO: Add TLS option when ESPHome supports it, right now it is just always TLS
           id(mqtt_id).set_topic_prefix("${MQTT_PREFIX}/" + mac_base64, "");
           id(mqtt_id).set_broker_address(mqtt_broker_address);
           id(mqtt_id).set_broker_port(mqtt_broker_port);
           id(mqtt_id).set_username(mqtt_username);
           id(mqtt_id).set_password(mqtt_password);
           id(mqtt_id).set_client_id(mac_base64);
-          if (!id(mqtt_initial_connection_setup)) { id(mqtt_id).disable_discovery(); }
+          if (!id(mqtt_initial_connection_setup) || id(mqtt_discovery_prefix) == "") {
+            id(mqtt_id).disable_discovery();
+          } else {
+            std::string discovery_prefix = mqtt_discovery_prefix->value();
+            id(mqtt_id).set_discovery_info(std::move(discovery_prefix), mqtt::MQTT_MAC_ADDRESS_UNIQUE_ID_GENERATOR, mqtt::MQTT_NONE_OBJECT_ID_GENERATOR, true, false);
+          }
           // These subscriptions are here so there is no need to re-subscribe if the session persisted to save bandwidth
           // Add subscription for last message id
-          id(mqtt_id).subscribe(id(mqtt_id).get_topic_prefix() + "/id", [=](const std::string &topic, const std::string &payload) {
+          id(mqtt_id).subscribe(id(mqtt_id).get_topic_prefix() + "/${ID_TOPIC}", [=](const std::string &topic, const std::string &payload) {
                 // This is the initial message received after boot, we can use it to check if the data was persisted in the broker
                 if (id(current_update_id) == "${INITIAL_UPDATE_ID}") {
                   id(mqtt_data_persisted) = true;
@@ -307,7 +319,7 @@ script:
         - lambda: |-
             std::string payload = std::to_string(esp_random());
             id(current_update_id) = payload;
-            id(mqtt_id)->publish(id(mqtt_id).get_topic_prefix() + "/id", payload, 1, true);
+            id(mqtt_id)->publish(id(mqtt_id).get_topic_prefix() + "/${ID_TOPIC}", payload, 1, true);
         # Listen to the final state being published
         - wait_until:
             condition:

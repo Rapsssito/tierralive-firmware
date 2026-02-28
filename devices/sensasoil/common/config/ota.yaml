@@ -5,7 +5,7 @@ substitutions:
 globals:
   - id: ota_check_count
     type: uint8_t
-    # TODO: Enable again when ESPHome supports it
+    # TODO: Enable when ESPHome supports it
     # restore_value: RTC
     restore_value: yes
     initial_value: "0"
@@ -18,6 +18,7 @@ http_request:
   buffer_size_rx: 1024
   buffer_size_tx: 1024
 
+# TODO: Handle safe mode (which should be just check for OTA)
 ota:
   - platform: http_request
     on_begin:

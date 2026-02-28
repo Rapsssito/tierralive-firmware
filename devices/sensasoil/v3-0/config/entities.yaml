@@ -48,7 +48,7 @@ sensor:
           - 1.91 -> 3.3
           - 2.40 -> 4.2
     state_class: measurement
-    state_topic: !lambda 'return (id(diagnostic_mode_enabled) | id(mqtt_initial_connection_setup)) ? id(mqtt_id).get_topic_prefix() + "/b_v" : "";'
+    state_topic: !lambda 'return id(diagnostic_mode) ? id(mqtt_id).get_topic_prefix() + "/b_v" : "";'
     <<: *public_sensor
   - platform: template
     id: battery_level
@@ -88,7 +88,7 @@ sensor:
     entity_category: "diagnostic"
     samples: 20
     state_class: measurement
-    state_topic: !lambda 'return (id(diagnostic_mode_enabled) | id(mqtt_initial_connection_setup)) ? id(mqtt_id).get_topic_prefix() + "/s_tv" : "";'
+    state_topic: !lambda 'return id(diagnostic_mode) ? id(mqtt_id).get_topic_prefix() + "/s_tv" : "";'
     <<: *public_sensor
   - platform: template
     id: soil_temperature
@@ -112,7 +112,7 @@ sensor:
     entity_category: "diagnostic"
     samples: 20
     state_class: measurement
-    state_topic: !lambda 'return (id(diagnostic_mode_enabled) | id(mqtt_initial_connection_setup)) ? id(mqtt_id).get_topic_prefix() + "/s_wv" : "";'
+    state_topic: !lambda 'return id(diagnostic_mode) ? id(mqtt_id).get_topic_prefix() + "/s_wv" : "";'
     <<: *public_sensor
   - platform: template
     id: soil_volumetric_water

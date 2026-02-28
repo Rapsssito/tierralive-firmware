@@ -21,7 +21,7 @@ substitutions:
 
 globals:
   # INTERNAL #
-  - id: diagnostic_mode_enabled
+  - id: diagnostic_mode
     type: bool
     restore_value: yes
     initial_value: "false"
@@ -35,7 +35,7 @@ sensor:
     state_class: measurement
     entity_category: "diagnostic"
     device_class: SIGNAL_STRENGTH
-    state_topic: !lambda 'return (id(diagnostic_mode_enabled) | id(mqtt_initial_connection_setup)) ? id(mqtt_id).get_topic_prefix() + "/n_s" : "";'
+    state_topic: !lambda 'return id(diagnostic_mode) ? id(mqtt_id).get_topic_prefix() + "/n_s" : "";'
     lambda: |-
         return id(wifi_signal_db).state;
     <<: *public_sensor
@@ -52,7 +52,7 @@ sensor:
     device_class: TEMPERATURE
     state_class: measurement
     entity_category: "diagnostic"
-    state_topic: !lambda 'return (id(diagnostic_mode_enabled) | id(mqtt_initial_connection_setup)) ? id(mqtt_id).get_topic_prefix() + "/c_t" : "";'
+    state_topic: !lambda 'return id(diagnostic_mode) ? id(mqtt_id).get_topic_prefix() + "/c_t" : "";'
     <<: *public_sensor
   - platform: template
     id: deep_sleep_duration
@@ -67,7 +67,7 @@ sensor:
         - 0.00 -> 60 # 1h
         - 100.00 -> 15 # 15min
     <<: *public_sensor
-    state_topic: !lambda 'return (id(diagnostic_mode_enabled) | id(mqtt_initial_connection_setup)) ? id(mqtt_id).get_topic_prefix() + "/s_d" : "";'
+    state_topic: !lambda 'return id(diagnostic_mode) ? id(mqtt_id).get_topic_prefix() + "/s_d" : "";'
 
 text_sensor:
   - platform: template
@@ -124,24 +124,6 @@ text_sensor:
         }
     <<: *public_sensor
     state_topic: !lambda return id(mqtt_id).get_topic_prefix() + "/er";
-
-switch:
-  - platform: template
-    id: diagnostic_mode
-    icon: mdi:bug
-    name: "Diagnostic mode"
-    lambda: ! return id(diagnostic_mode_enabled);
-    turn_on_action:
-      - lambda: |-
-          id(diagnostic_mode_enabled) = true;
-          id(mqtt_initial_connection_setup) = true;
-    turn_off_action:
-      - lambda: ! id(diagnostic_mode_enabled) = false;
-    entity_category: "config"
-    qos: 1
-    subscribe_qos: 1
-    state_topic: !lambda return id(mqtt_id).get_topic_prefix() + "/dbg/s";
-    command_topic: !lambda return id(mqtt_id).get_topic_prefix() + "/dbg/x";
 
 light:
   - platform: monochromatic
