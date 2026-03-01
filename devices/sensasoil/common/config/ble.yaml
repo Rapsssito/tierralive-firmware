@@ -138,6 +138,19 @@ esp32_ble_server:
             then:
               - lambda: |-
                   static std::vector<uint8_t> improv_buffer;
+                  static std::function<void(const improv::Error&)> set_error_notify_and_clear = [](improv::Error error) {
+                    id(improv_error_characteristic)->set_value(error);
+                    id(improv_error_characteristic)->notify();
+                    improv_buffer.clear();
+                  };
+                  static std::function<bool(const std::vector<std::vector<uint8_t>>&, size_t)> ensure_expected_length = [](const std::vector<std::vector<uint8_t>>& data, size_t expected_length) -> bool {
+                    if (data.size() != expected_length) {
+                      ESP_LOGW("ExtendedImprov", "Received data with invalid length: expected %d, got %d", expected_length, data.size());
+                      set_error_notify_and_clear(improv::Error::ERROR_INVALID_RPC);
+                      return false;
+                    }
+                    return true;
+                  };
                   id(last_ble_communication_timestamp) = millis();
                   if (x.empty()) return;
                   improv_buffer.insert(improv_buffer.end(), x.begin(), x.end());
@@ -150,19 +163,16 @@ esp32_ble_server:
                     switch (command.command) {
                       case improv::BAD_CHECKSUM:
                         ESP_LOGW("ExtendedImprov", "Error decoding Improv payload");
-                        id(improv_error_characteristic)->set_value(improv::Error::ERROR_INVALID_RPC);
-                        id(improv_error_characteristic)->notify();
-                        improv_buffer.clear();
+                        set_error_notify_and_clear(improv::Error::ERROR_INVALID_RPC);
                         break;
                       case improv::WIFI_SETTINGS: {
-                        ESP_LOGD("ExtendedImprov", "Wi-Fi settings received");
+                        ESP_LOGD("ExtendedImprov", "WiFi settings received");
                         if (id(improv_state) == improv::State::STATE_PROVISIONING) {
                           ESP_LOGD("ExtendedImprov", "Settings received, but already provisioning");
-                          id(improv_error_characteristic)->set_value(improv::Error::ERROR_NOT_AUTHORIZED);
-                          id(improv_error_characteristic)->notify();
-                          improv_buffer.clear();
+                          set_error_notify_and_clear(improv::Error::ERROR_NOT_AUTHORIZED);
                           break;
                         }
+                        if (!ensure_expected_length(command.data, 2)) break;
                         id(improv_state) = improv::State::STATE_PROVISIONING;
                         id(improv_status_characteristic)->notify();
                         id(improv_wifi_configure)->execute(std::string(command.data[0].begin(), command.data[0].end()), std::string(command.data[1].begin(), command.data[1].end()));
@@ -175,16 +185,14 @@ esp32_ble_server:
                           case ${E_IMPROV_MQTT_CHANGE_SETTINGS_COMMAND_ID}:
                             if (id(improv_state) == improv::State::STATE_PROVISIONING) {
                               ESP_LOGD("ExtendedImprov", "MQTT settings received, but not authorized");
-                              id(improv_error_characteristic)->set_value(improv::Error::ERROR_NOT_AUTHORIZED);
-                              id(improv_error_characteristic)->notify();
-                              improv_buffer.clear();
+                              set_error_notify_and_clear(improv::Error::ERROR_NOT_AUTHORIZED);
                               break;
                             }
-                            // TODO: Add tls when ESPHome supports it
+                            if (!ensure_expected_length(command.data, 6)) break;
                             ESP_LOGD("ExtendedImprov", "MQTT settings received");
                             id(improv_state) = improv::State::STATE_PROVISIONING;
                             id(improv_status_characteristic)->notify();
-                            id(improv_mqtt_configure)->execute(std::string(command.data[1].begin(), command.data[1].end()), bytebuffer::ByteBuffer::wrap(command.data[2]).get_uint16(), std::string(command.data[3].begin(), command.data[3].end()), std::string(command.data[4].begin(), command.data[4].end()));
+                            id(improv_mqtt_configure)->execute(std::string(command.data[1].begin(), command.data[1].end()), bytebuffer::ByteBuffer::wrap(command.data[2]).get_uint16(), std::string(command.data[3].begin(), command.data[3].end()), std::string(command.data[4].begin(), command.data[4].end()), command.data[5][0] != 0);
                             break;
                           case ${E_IMPROV_FACTORY_RESET_COMMAND_ID}:
                             ESP_LOGD("ExtendedImprov", "Factory reset received");
@@ -200,6 +208,7 @@ esp32_ble_server:
                             break;
                           case ${E_IMPROV_ENABLE_DIAGNOSTIC_COMMAND_ID}: {
                             ESP_LOGD("ExtendedImprov", "Enable diagnostic command received");
+                            if (!ensure_expected_length(command.data, 2)) break;
                             bool enable_diagnostic = command.data[1][0] != 0;
                             if (enable_diagnostic) {
                               id(diagnostic_mode) = true;
@@ -212,6 +221,7 @@ esp32_ble_server:
                           }
                           case ${E_IMPROV_MQTT_DISCOVERY_PREFIX_COMMAND_ID}: {
                             ESP_LOGD("ExtendedImprov", "MQTT discovery prefix command received");
+                            if (!ensure_expected_length(command.data, 2)) break;
                             std::string new_prefix(command.data[1].begin(), command.data[1].end());
                             id(mqtt_discovery_prefix) = new_prefix;
                             id(mqtt_initial_connection_setup) = true;
@@ -231,9 +241,7 @@ esp32_ble_server:
                         break;
                       default:
                         ESP_LOGW("ExtendedImprov", "Unknown Improv payload");
-                        id(improv_error_characteristic)->set_value(improv::Error::ERROR_UNKNOWN_RPC);
-                        id(improv_error_characteristic)->notify();
-                        improv_buffer.clear();
+                        set_error_notify_and_clear(improv::Error::ERROR_UNKNOWN_RPC);
                     }
                   } else if (improv_buffer.size() - 2 > length) {
                     ESP_LOGD("ExtendedImprov", "Too much data received or data malformed; resetting buffer...");
@@ -320,6 +328,7 @@ script:
       new_mqtt_broker_port: uint16_t
       new_mqtt_username: std::string
       new_mqtt_password: std::string
+      use_tls: bool
     then:
       - lambda: |-
           id(device_setup_state) = ${SETUP_STATE_MQTT_CONFIG};
@@ -332,9 +341,9 @@ script:
         - not: mqtt.connected
       - delay: 5s
       - lambda: |-
-          ESP_LOGD("MQTT Config", "Applying new MQTT settings: broker=%s, port=%d, username=%s", new_mqtt_broker_address.c_str(), new_mqtt_broker_port, new_mqtt_username.c_str());
+          ESP_LOGD("MQTT Config", "Applying new MQTT settings: broker=%s, port=%d, username=%s, use_tls=%s", new_mqtt_broker_address.c_str(), new_mqtt_broker_port, new_mqtt_username.c_str(), use_tls ? "true" : "false");
           // Store new settings in temporary variables while we test the connection
-          id(mqtt_setup)->execute(new_mqtt_broker_address, new_mqtt_broker_port, new_mqtt_username, new_mqtt_password);
+          id(mqtt_setup)->execute(new_mqtt_broker_address, new_mqtt_broker_port, new_mqtt_username, new_mqtt_password, use_tls);
       - script.wait: mqtt_setup
       - lambda: |-
           if (id(mqtt_id)->is_connected()) {
@@ -365,11 +374,14 @@ script:
           std::string mqtt_port_str(sizeof(uint16_t), 0);
           mqtt_port_str[0] = static_cast<char>(id(mqtt_broker_port) & 0xFF);
           mqtt_port_str[1] = static_cast<char>((id(mqtt_broker_port) >> 8) & 0xFF);
+          uint8_t tls_flags = id(mqtt_use_tls) ? 1 : 0;
           std::vector<std::string> response = {
               {${E_IMPROV_MQTT_VIEW_SETTINGS_COMMAND_ID}},                                    
               id(mqtt_broker_address),
               mqtt_port_str,
-              id(mqtt_username)
+              std::to_string(tls_flags),
+              id(mqtt_username),
+              id(mqtt_discovery_prefix)
           };
           id(improv_rpc_result)->set_value(improv::build_rpc_response(improv::CUSTOM, response, true));
           id(improv_rpc_result)->notify();

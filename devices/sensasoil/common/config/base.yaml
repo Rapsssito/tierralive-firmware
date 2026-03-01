@@ -74,6 +74,7 @@ script:
           mqtt_broker_port: !lambda return id(mqtt_broker_port);
           mqtt_username: !lambda return id(mqtt_username);
           mqtt_password: !lambda return id(mqtt_password);
+          use_tls: !lambda return id(mqtt_use_tls);
       # If mqtt fails, this script will be stopped by the disconnect scripts
       - script.wait: mqtt_setup
       # Check if we need to do the initial connection setup (only if the data is not persisted)
