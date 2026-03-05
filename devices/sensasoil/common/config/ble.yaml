@@ -48,7 +48,7 @@ esp32_ble:
   enable_on_boot: False
   max_connections: 1
 
-# TODO: Check that improv RPC command flow works
+# TODO: Test all improv RPC command flow works for connections
 esp32_ble_server:
   id: ble_server
   manufacturer: TierraLive
@@ -192,7 +192,7 @@ esp32_ble_server:
                             ESP_LOGD("ExtendedImprov", "MQTT settings received");
                             id(improv_state) = improv::State::STATE_PROVISIONING;
                             id(improv_status_characteristic)->notify();
-                            id(improv_mqtt_configure)->execute(std::string(command.data[1].begin(), command.data[1].end()), bytebuffer::ByteBuffer::wrap(command.data[2]).get_uint16(), std::string(command.data[3].begin(), command.data[3].end()), std::string(command.data[4].begin(), command.data[4].end()), command.data[5][0] != 0);
+                            id(improv_mqtt_configure)->execute(std::string(command.data[1].begin(), command.data[1].end()), bytebuffer::ByteBuffer::wrap(command.data[2]).get_uint16(), std::string(command.data[3].begin(), command.data[3].end()), std::string(command.data[4].begin(), command.data[4].end()), command.data[5][0]);
                             break;
                           case ${E_IMPROV_FACTORY_RESET_COMMAND_ID}:
                             ESP_LOGD("ExtendedImprov", "Factory reset received");
@@ -328,7 +328,7 @@ script:
       new_mqtt_broker_port: uint16_t
       new_mqtt_username: std::string
       new_mqtt_password: std::string
-      use_tls: bool
+      tls_flags: uint8_t
     then:
       - lambda: |-
           id(device_setup_state) = ${SETUP_STATE_MQTT_CONFIG};
@@ -341,9 +341,9 @@ script:
         - not: mqtt.connected
       - delay: 5s
       - lambda: |-
-          ESP_LOGD("MQTT Config", "Applying new MQTT settings: broker=%s, port=%d, username=%s, use_tls=%s", new_mqtt_broker_address.c_str(), new_mqtt_broker_port, new_mqtt_username.c_str(), use_tls ? "true" : "false");
+          ESP_LOGD("MQTT Config", "Applying new MQTT settings: broker=%s, port=%d, username=%s, tls_flags=%02X", new_mqtt_broker_address.c_str(), new_mqtt_broker_port, new_mqtt_username.c_str(), tls_flags);
           // Store new settings in temporary variables while we test the connection
-          id(mqtt_setup)->execute(new_mqtt_broker_address, new_mqtt_broker_port, new_mqtt_username, new_mqtt_password, use_tls);
+          id(mqtt_setup)->execute(new_mqtt_broker_address, new_mqtt_broker_port, new_mqtt_username, new_mqtt_password, tls_flags);
       - script.wait: mqtt_setup
       - lambda: |-
           if (id(mqtt_id)->is_connected()) {
@@ -374,12 +374,12 @@ script:
           std::string mqtt_port_str(sizeof(uint16_t), 0);
           mqtt_port_str[0] = static_cast<char>(id(mqtt_broker_port) & 0xFF);
           mqtt_port_str[1] = static_cast<char>((id(mqtt_broker_port) >> 8) & 0xFF);
-          uint8_t tls_flags = id(mqtt_use_tls) ? 1 : 0;
           std::vector<std::string> response = {
               {${E_IMPROV_MQTT_VIEW_SETTINGS_COMMAND_ID}},                                    
               id(mqtt_broker_address),
               mqtt_port_str,
-              std::to_string(tls_flags),
+              {id(mqtt_tls_flags)},
+              {id(mqtt_id)->is_connected()},
               id(mqtt_username),
               id(mqtt_discovery_prefix)
           };
@@ -389,10 +389,19 @@ script:
   - id: improv_wifi_ble_show_config
     then:
       - lambda: |-
+          char ip_buf[network::IP_ADDRESS_BUFFER_SIZE];
           std::string ssid = id(wificomponent)->get_sta().get_ssid();
+          network::IPAddresses ip_addresses = id(wificomponent)->get_ip_addresses();
+          if (!ip_addresses.empty()) {
+            network::IPAddress ip_address = ip_addresses[0];
+            ip_address.str_to(ip_buf);
+          } else {
+            std::strncpy(ip_buf, "", sizeof(ip_buf));
+          }
           std::vector<std::string> response = {
               {${E_IMPROV_WIFI_VIEW_SETTINGS_COMMAND_ID}},                                    
-              ssid
+              ssid,
+              ip_buf
           };
           id(improv_rpc_result)->set_value(improv::build_rpc_response(improv::CUSTOM, response, true));
           id(improv_rpc_result)->notify();

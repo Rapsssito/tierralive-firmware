@@ -54,10 +54,10 @@ globals:
     restore_value: yes
     max_restore_data_length: 254
     initial_value: '""'
-  - id: mqtt_use_tls
-    type: bool
+  - id: mqtt_tls_flags
+    type: uint8_t
     restore_value: yes
-    initial_value: "true"  # TODO: Non-configurable yet
+    initial_value: "0x03" # {RESERVEDx6, VERIFY_SSL, USE_TLS}
   # INTERNAL #
   - id: ota_url
     type: std::string
@@ -89,7 +89,6 @@ mqtt:
   username: "u"  # Configured by globals
   password: "p"  # Configured by globals
   idf_send_async: true
-  # tls: true  # TODO: again when ESPHome supports it
   # Let's Encrypt ISRG Root X1 Certificate
   certificate_authority: |
     -----BEGIN CERTIFICATE-----
@@ -142,6 +141,8 @@ mqtt:
 wifi:
   id: wificomponent
   enable_on_boot: false
+  min_auth_mode: WPA
+  post_connect_roaming: false
   ssid: "s"  # Configured by globals
   password: "pppppppp"  # Configured by globals
   fast_connect: True
@@ -253,7 +254,7 @@ script:
       mqtt_broker_port: uint16_t
       mqtt_username: std::string
       mqtt_password: std::string
-      use_tls: bool  # TODO: Implement when ESPHome supports it
+      tls_flags: uint8_t
     then:
       # Setup MQTT connection
       - lambda: |-
