@@ -390,7 +390,6 @@ script:
     then:
       - lambda: |-
           char ip_buf[network::IP_ADDRESS_BUFFER_SIZE];
-          std::string ssid = id(wificomponent)->get_sta().get_ssid();
           network::IPAddresses ip_addresses = id(wificomponent)->get_ip_addresses();
           if (!ip_addresses.empty()) {
             network::IPAddress ip_address = ip_addresses[0];
@@ -400,7 +399,7 @@ script:
           }
           std::vector<std::string> response = {
               {${E_IMPROV_WIFI_VIEW_SETTINGS_COMMAND_ID}},                                    
-              ssid,
+              id(wifi_ssid),
               ip_buf
           };
           id(improv_rpc_result)->set_value(improv::build_rpc_response(improv::CUSTOM, response, true));
