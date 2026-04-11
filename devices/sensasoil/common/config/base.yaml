@@ -36,16 +36,6 @@ esphome:
 mdns:
   disabled: true
 
-esp32:
-  board: esp32-c3-devkitm-1
-  variant: ESP32C3
-  flash_size: "4MB"
-  framework:
-    type: esp-idf
-    sdkconfig_options:
-      CONFIG_COMPILER_OPTIMIZATION_SIZE: y
-      CONFIG_ESPTOOLPY_FLASHSIZE_4MB: y
-
 script:
   - id: main_script
     mode: restart
@@ -85,6 +75,7 @@ script:
       - script.wait: refresh_sensors_script
       # Wait in case the BLE server is still running
       - script.wait: serve_ble_server
+      - safe_mode.mark_successful
       - lambda: |-
           ESP_LOGI("main_script", "Main script complete, entering deep sleep");
           id(last_exec_error) = ${ERROR_NONE};

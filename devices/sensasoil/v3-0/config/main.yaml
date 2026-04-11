@@ -2,6 +2,15 @@ packages:
   sensasoil_common: !include ../../common/config/common.yaml
   entities: !include entities.yaml
 
+esp32:
+  variant: ESP32C3
+  flash_size: "4MB"
+  framework:
+    type: esp-idf
+    sdkconfig_options:
+      CONFIG_COMPILER_OPTIMIZATION_SIZE: y
+      CONFIG_ESPTOOLPY_FLASHSIZE_4MB: y
+
 substitutions:
   HARDWARE_VERSION: "3.0"
   HARDWARE_VERSION_FLAT: "3-0"
