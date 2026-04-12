@@ -1,0 +1,22 @@
+packages:
+  sensasoil_common: !include ../../common/config/common.yaml
+  entities: !include entities.yaml
+
+esp32:
+  variant: ESP32C6
+  framework:
+    type: esp-idf
+
+i2c:
+  - id: i2c_bus
+    sda: GPIO11
+    scl: GPIO10
+    frequency: 100kHz
+    scan: false
+    sda_pullup_enabled: false
+    scl_pullup_enabled: false
+
+substitutions:
+  HARDWARE_VERSION: "4.0"
+  HARDWARE_VERSION_FLAT: "4-0"
+  FIRMWARE_VERSION: !env_var FIRMWARE_VERSION

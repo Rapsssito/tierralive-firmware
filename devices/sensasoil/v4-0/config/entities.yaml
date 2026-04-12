@@ -1,0 +1,217 @@
+external_components:
+  - source: github://pr#13585
+    components: [max17048]
+    refresh: 1h
+
+.public_sensor: &public_sensor
+  update_interval: never
+  qos: 1
+  subscribe_qos: 1
+
+globals:
+  # INTERNAL #
+  - id: power_sensors_time
+    type: unsigned long
+    restore_value: no
+    initial_value: "0"
+
+sensor:
+  - platform: max17048
+    id: battery_sensor
+    address: 0x36
+    update_interval: never
+    battery_voltage:
+      name: "Battery voltage"
+      id: battery_voltage
+      entity_category: "diagnostic"
+      state_class: measurement
+      state_topic: !lambda 'return id(diagnostic_mode) ? id(mqtt_id).get_topic_prefix() + "/b_v" : "";'
+      qos: 1
+      subscribe_qos: 1
+    battery_level:
+      name: "Battery level"
+      id: battery_level
+      state_class: measurement
+      device_class: BATTERY
+      icon: mdi:battery
+      state_topic: !lambda return id(mqtt_id).get_topic_prefix() + "/b_l";
+      qos: 1
+      subscribe_qos: 1
+    rate:
+      name: "Battery rate"
+      id: battery_rate
+      entity_category: "diagnostic"
+      state_class: measurement
+      state_topic: !lambda 'return id(diagnostic_mode) ? id(mqtt_id).get_topic_prefix() + "/b_r" : "";'
+      qos: 1
+      subscribe_qos: 1
+  - platform: hdc302x
+    id: temperature_humidity_sensor
+    address: 0x44
+    power_mode: ULTRA_LOW_POWER
+    update_interval: never
+    temperature:
+      name: "Ambient temperature"
+      id: ambient_temperature
+      accuracy_decimals: 1
+      state_class: measurement
+      device_class: TEMPERATURE
+      state_topic: !lambda return id(mqtt_id).get_topic_prefix() + "/a_t";
+      qos: 1
+      subscribe_qos: 1
+    humidity:
+      name: "Ambient humidity"
+      id: ambient_humidity
+      accuracy_decimals: 1
+      device_class: HUMIDITY
+      state_class: measurement
+      state_topic: !lambda return id(mqtt_id).get_topic_prefix() + "/a_h";
+      qos: 1
+      subscribe_qos: 1
+  - platform: adc
+    id: soil_temperature_v
+    pin: GPIO4
+    name: "Soil temperature voltage"
+    attenuation: 12db
+    accuracy_decimals: 2
+    unit_of_measurement: "V"
+    entity_category: "diagnostic"
+    samples: 20
+    state_class: measurement
+    state_topic: !lambda 'return id(diagnostic_mode) ? id(mqtt_id).get_topic_prefix() + "/s_tv" : "";'
+    <<: *public_sensor
+  - platform: template
+    id: soil_temperature
+    name: "Soil temperature"
+    icon: mdi:thermometer-probe
+    unit_of_measurement: "°C"
+    accuracy_decimals: 1
+    device_class: TEMPERATURE
+    state_class: measurement
+    lambda: ! return id(soil_temperature_v).state;
+    filters:
+    - lambda: return 298.15 / (1 + 298.15 / 4050 * log(3.3 / x - 1)) - 273.15;
+    state_topic: !lambda return id(mqtt_id).get_topic_prefix() + "/s_t";
+    <<: *public_sensor
+  - platform: adc
+    id: soil_volumetric_water_v
+    pin: GPIO5
+    name: "Soil volumetric water voltage"
+    attenuation: 12db
+    unit_of_measurement: "V"
+    entity_category: "diagnostic"
+    samples: 20
+    state_class: measurement
+    state_topic: !lambda 'return id(diagnostic_mode) ? id(mqtt_id).get_topic_prefix() + "/s_wv" : "";'
+    <<: *public_sensor
+  - platform: template
+    id: soil_volumetric_water
+    name: "Soil volumetric water"
+    icon: mdi:water-percent
+    unit_of_measurement: "%"
+    device_class: MOISTURE
+    state_class: measurement
+    lambda: ! return id(soil_volumetric_water_v).state;
+    filters:
+    - lambda: return 778 * exp(-2.51 * x);
+    - clamp:
+        min_value: 0
+        max_value: 100
+    <<: *public_sensor
+    state_topic: !lambda return id(mqtt_id).get_topic_prefix() + "/s_w";
+
+binary_sensor:
+  - platform: template
+    id: is_battery_charging
+    name: "Charging"
+    device_class: BATTERY_CHARGING
+    icon: mdi:battery-charging
+    lambda: ! return true; # DEBUG
+    qos: 1
+    subscribe_qos: 1
+    state_topic: !lambda return id(mqtt_id).get_topic_prefix() + "/b_c";
+  - platform: gpio
+    id: factory_reset_internal_button
+    use_interrupt: True
+    pin:
+      number: GPIO9
+      ignore_strapping_warning: true
+      mode:
+        input: True
+        pullup: True
+      inverted: True
+    internal: True
+    filters:
+      - delayed_on: 15s
+      - delayed_off: 10ms
+    on_press:
+      then:
+        - button.press: factory_reset_button
+
+output:
+  - platform: ledc
+    id: led_status_output_internal
+    pin:
+      number: GPIO15
+      ignore_strapping_warning: true
+
+switch:
+  - platform: gpio
+    id: power_sensors
+    pin: GPIO1
+    icon: mdi:electric-switch
+    name: "Power sensors"
+    restore_mode: ALWAYS_OFF
+    internal: True
+    on_turn_on:
+      then:
+        - lambda: ! id(power_sensors_time) = millis();
+
+button:
+  - platform: factory_reset
+    id: factory_reset_button
+    name: "Factory reset"
+    internal: True
+
+script:
+  - id: refresh_sensors_script
+    mode: restart
+    then:
+      # Turn on peripheral power if not already
+      - lambda:
+          if (!id(power_sensors).state) {
+            id(power_sensors)->turn_on();
+          }
+      # Publish state for firmware and hardware versions (automatically published only once handled by sensor)
+      - text_sensor.template.publish:
+          id: firmware_version
+          state: "${FIRMWARE_VERSION}"
+      - text_sensor.template.publish:
+          id: hardware_version
+          state: "${HARDWARE_VERSION}"
+      # Publish state of non-peripherals
+      - component.update: error_state
+      # - binary_sensor.template.publish:
+      #     id: is_battery_charging
+      #     state: !lambda return id(is_charging_internal).state;
+      - component.update: chip_temperature
+      - component.update: wifi_signal_db
+      - component.update: network_signal
+      - component.update: battery_sensor
+      # Update time to sleep based on battery level
+      - component.update: deep_sleep_duration
+      - component.update: temperature_humidity_sensor
+      # Wait 10ms since power_sensors_time
+      - if:
+          condition:
+            lambda: !lambda return 10 > (millis() - id(power_sensors_time));
+          then:
+            - delay: !lambda return 10 - (millis() - id(power_sensors_time));
+      # Update peripherals voltage sensors
+      - component.update: soil_temperature_v
+      - component.update: soil_volumetric_water_v
+      # Turn off peripheral power
+      - switch.turn_off: power_sensors
+      # Update template sensors based on the voltage
+      - component.update: soil_temperature
+      - component.update: soil_volumetric_water
