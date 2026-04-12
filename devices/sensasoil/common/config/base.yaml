@@ -73,9 +73,10 @@ script:
       # Sensors
       - script.execute: refresh_sensors_script
       - script.wait: refresh_sensors_script
+      # Mark boot successful to prevent safe mode from false-triggering on next boot after a successful setup
+      - safe_mode.mark_successful
       # Wait in case the BLE server is still running
       - script.wait: serve_ble_server
-      - safe_mode.mark_successful
       - lambda: |-
           ESP_LOGI("main_script", "Main script complete, entering deep sleep");
           id(last_exec_error) = ${ERROR_NONE};
