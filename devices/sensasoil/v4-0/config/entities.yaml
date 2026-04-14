@@ -2,6 +2,9 @@ external_components:
   - source: github://pr#13585
     components: [max17048]
     refresh: 1h
+  - source: github://pr#15736
+    components: [bq25186]
+    refresh: 1h
 
 .public_sensor: &public_sensor
   update_interval: never
@@ -14,6 +17,24 @@ globals:
     type: unsigned long
     restore_value: no
     initial_value: "0"
+
+bq25186:
+  id: bq25186_charger
+  update_interval: never
+  fast_charge_current: 400
+  watchdog: disabled
+  vindpm_mode: battery_tracking
+  battery_ocp_limit: 1500ma
+  safety_timer: disabled
+  input_current_limit: 665ma
+  enable_push_button: false
+  system_regulation: pass_through
+  mask_charge_status_interrupt: true
+  mask_vindpm_interrupt: true
+  mask_ts_interrupt: true
+  mask_treg_interrupt: true
+  mask_bat_interrupt: true
+  mask_pg_interrupt: true
 
 sensor:
   - platform: max17048
@@ -121,15 +142,16 @@ sensor:
     state_topic: !lambda return id(mqtt_id).get_topic_prefix() + "/s_w";
 
 binary_sensor:
-  - platform: template
-    id: is_battery_charging
-    name: "Charging"
-    device_class: BATTERY_CHARGING
-    icon: mdi:battery-charging
-    lambda: ! return true; # DEBUG
-    qos: 1
-    subscribe_qos: 1
-    state_topic: !lambda return id(mqtt_id).get_topic_prefix() + "/b_c";
+  - platform: bq25186
+    bq25186_id: bq25186_charger
+    charging:
+      id: is_battery_charging
+      name: "Charging"
+      device_class: BATTERY_CHARGING
+      icon: mdi:battery-charging
+      qos: 1
+      subscribe_qos: 1
+      state_topic: !lambda return id(mqtt_id).get_topic_prefix() + "/b_c";
   - platform: gpio
     id: factory_reset_internal_button
     use_interrupt: True
@@ -177,6 +199,9 @@ script:
   - id: refresh_sensors_script
     mode: restart
     then:
+      # Update battery sensor first, since some actions depend on its state
+      # and also prevents other stuff from affecting the battery reading (like powering sensors)
+      - component.update: battery_sensor
       # Turn on peripheral power if not already
       - lambda:
           if (!id(power_sensors).state) {
@@ -190,14 +215,11 @@ script:
           id: hardware_version
           state: "${HARDWARE_VERSION}"
       # Publish state of non-peripherals
+      - component.update: bq25186_charger
       - component.update: error_state
-      # - binary_sensor.template.publish:
-      #     id: is_battery_charging
-      #     state: !lambda return id(is_charging_internal).state;
       - component.update: chip_temperature
       - component.update: wifi_signal_db
       - component.update: network_signal
-      - component.update: battery_sensor
       # Update time to sleep based on battery level
       - component.update: deep_sleep_duration
       - component.update: temperature_humidity_sensor
