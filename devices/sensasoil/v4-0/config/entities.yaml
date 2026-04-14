@@ -44,6 +44,8 @@ sensor:
     battery_voltage:
       name: "Battery voltage"
       id: battery_voltage
+      device_class: VOLTAGE
+      unit_of_measurement: "V"
       entity_category: "diagnostic"
       state_class: measurement
       state_topic: !lambda 'return id(diagnostic_mode) ? id(mqtt_id).get_topic_prefix() + "/b_v" : "";'
@@ -61,6 +63,7 @@ sensor:
     rate:
       name: "Battery rate"
       id: battery_rate
+      device_class: ""
       entity_category: "diagnostic"
       state_class: measurement
       state_topic: !lambda 'return id(diagnostic_mode) ? id(mqtt_id).get_topic_prefix() + "/b_r" : "";'
