@@ -60,6 +60,11 @@ sensor:
       state_topic: !lambda return id(mqtt_id).get_topic_prefix() + "/b_l";
       qos: 1
       subscribe_qos: 1
+      filters:
+        # Make sure it stays between 0 and 100 since max17048 can be a bit optimistic
+        - clamp:
+            min_value: 0
+            max_value: 100
     rate:
       name: "Battery rate"
       id: battery_rate
@@ -147,17 +152,40 @@ sensor:
 binary_sensor:
   - platform: bq25186
     bq25186_id: bq25186_charger
+    charge_done:
+      id: is_charging_done_internal
+      internal: true
+      trigger_on_initial_state: true
+      on_state:
+        then:
+          # Turn off the red LED when charging is done, turn on otherwise
+          - lambda: |-
+              if (x) {
+                id(pg_gpo_switch)->turn_off();
+              } else {
+                id(pg_gpo_switch)->turn_on();
+              }
     charging:
       id: is_battery_charging
       name: "Charging"
       device_class: BATTERY_CHARGING
       icon: mdi:battery-charging
+      trigger_on_initial_state: true
       qos: 1
       subscribe_qos: 1
       state_topic: !lambda return id(mqtt_id).get_topic_prefix() + "/b_c";
+      on_state:
+        then:
+          - if:
+              condition:
+                - ble.enabled
+              then:
+                - ble_server.characteristic.notify:
+                    id: ble_battery_status_char
   - platform: gpio
     id: factory_reset_internal_button
     use_interrupt: True
+    trigger_on_initial_state: true
     pin:
       number: GPIO9
       ignore_strapping_warning: true
@@ -181,6 +209,11 @@ output:
       ignore_strapping_warning: true
 
 switch:
+  - platform: bq25186
+    bq25186_id: bq25186_charger
+    pg_gpo:
+      id: pg_gpo_switch
+      internal: true
   - platform: gpio
     id: power_sensors
     pin: GPIO1
@@ -205,27 +238,37 @@ script:
       # Update battery sensor first, since some actions depend on its state
       # and also prevents other stuff from affecting the battery reading (like powering sensors)
       - component.update: battery_sensor
+      - delay: 1ms # yield
+      # Publish state for firmware and hardware versions (automatically published only once handled by sensor)
+      - text_sensor.template.publish:
+          id: firmware_version
+          state: "${FIRMWARE_VERSION}"
+      - delay: 1ms # yield
+      - text_sensor.template.publish:
+          id: hardware_version
+          state: "${HARDWARE_VERSION}"
+      - delay: 1ms # yield
+      # Publish state of non-peripherals
+      - component.update: bq25186_charger
+      - delay: 1ms # yield
+      - component.update: error_state
+      - delay: 1ms # yield
+      - component.update: chip_temperature
+      - delay: 1ms # yield
+      - component.update: wifi_signal_db
+      - delay: 1ms # yield
+      - component.update: network_signal
+      - delay: 1ms # yield
+      # Update time to sleep based on battery level
+      - component.update: deep_sleep_duration
+      - delay: 1ms # yield
       # Turn on peripheral power if not already
       - lambda:
           if (!id(power_sensors).state) {
             id(power_sensors)->turn_on();
           }
-      # Publish state for firmware and hardware versions (automatically published only once handled by sensor)
-      - text_sensor.template.publish:
-          id: firmware_version
-          state: "${FIRMWARE_VERSION}"
-      - text_sensor.template.publish:
-          id: hardware_version
-          state: "${HARDWARE_VERSION}"
-      # Publish state of non-peripherals
-      - component.update: bq25186_charger
-      - component.update: error_state
-      - component.update: chip_temperature
-      - component.update: wifi_signal_db
-      - component.update: network_signal
-      # Update time to sleep based on battery level
-      - component.update: deep_sleep_duration
       - component.update: temperature_humidity_sensor
+      - delay: 1ms # yield
       # Wait 10ms since power_sensors_time
       - if:
           condition:
@@ -234,9 +277,14 @@ script:
             - delay: !lambda return 10 - (millis() - id(power_sensors_time));
       # Update peripherals voltage sensors
       - component.update: soil_temperature_v
+      - delay: 1ms # yield
       - component.update: soil_volumetric_water_v
+      - delay: 1ms # yield
       # Turn off peripheral power
       - switch.turn_off: power_sensors
+      - delay: 1ms # yield
       # Update template sensors based on the voltage
       - component.update: soil_temperature
+      - delay: 1ms # yield
       - component.update: soil_volumetric_water
+      - delay: 1ms # yield
