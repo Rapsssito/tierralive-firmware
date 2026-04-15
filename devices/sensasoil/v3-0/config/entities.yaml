@@ -133,6 +133,7 @@ sensor:
 binary_sensor:
   - platform: gpio
     id: is_charging_internal
+    trigger_on_initial_state: true
     use_interrupt: true
     pin:
       number: GPIO6
@@ -143,6 +144,7 @@ binary_sensor:
     internal: True
   - platform: gpio
     id: factory_reset_internal_button
+    trigger_on_initial_state: true
     use_interrupt: True
     pin:
       number: GPIO9
@@ -160,6 +162,7 @@ binary_sensor:
         - button.press: factory_reset_button
   - platform: template
     id: is_battery_charging
+    trigger_on_initial_state: true
     name: "Charging"
     device_class: BATTERY_CHARGING
     icon: mdi:battery-charging
@@ -214,14 +217,17 @@ script:
       - text_sensor.template.publish:
           id: hardware_version
           state: "${HARDWARE_VERSION}"
+      - delay: 1ms # yield
       # Publish state of non-peripherals
       - component.update: error_state
       - binary_sensor.template.publish:
           id: is_battery_charging
           state: !lambda return id(is_charging_internal).state;
+      - delay: 1ms # yield
       - component.update: chip_temperature
       - component.update: wifi_signal_db
       - component.update: network_signal
+      - delay: 1ms # yield
       - component.update: battery_v
       - component.update: battery_level
       # Update time to sleep based on battery level
@@ -236,8 +242,10 @@ script:
       - component.update: soil_temperature_v
       - component.update: temperature_humidity_sensor
       - component.update: soil_volumetric_water_v
+      - delay: 1ms # yield
       # Turn off peripheral power
       - switch.turn_off: power_sensors
       # Update template sensors based on the voltage
       - component.update: soil_temperature
       - component.update: soil_volumetric_water
+      - delay: 1ms # yield
