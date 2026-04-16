@@ -6,7 +6,7 @@ substitutions:
   ERROR_NONE: "0"
   ERROR_WIFI: "1"
   ERROR_MQTT: "2"
-  ERROR_MQTT_TIMEOUT: "3"
+  ERROR_MQTT_ACK_TIMEOUT: "3"
   ERROR_OTA: "4"
   # Error timeouts
   DELAY_ERROR_WIFI_MS: "2 * 60 * 1000"
@@ -344,12 +344,12 @@ script:
         - lambda: |-
             if(id(current_update_id) == id(received_update_id)) {
               // Everything went fine, go to deep sleep
-              id(send_to_deep_sleep)->execute(100, 15 * 1000 * 60);
+              id(send_to_deep_sleep)->execute(100, id(deep_sleep_duration).state * 60 * 1000);
             } else {
               ESP_LOGE("deep_sleep_wait_mqtt", "MQTT timeout waiting for update ID to be received. current_update_id: %s, received_update_id: %s", id(current_update_id).c_str(), id(received_update_id).c_str());
-              id(last_exec_error) = ${ERROR_MQTT_TIMEOUT};
+              id(last_exec_error) = ${ERROR_MQTT_ACK_TIMEOUT};
               // If the message is not received in time, reset with a short deep sleep to avoid blocking the device if something is wrong with the MQTT connection
-              id(send_to_deep_sleep)->execute(100, 5 * 60 * 1000);
+              id(send_to_deep_sleep)->execute(100, ${SLEEP_ERROR_MQTT_MS});
             }
             // As a well behaved device, disconnect from MQTT broker to avoid wasting resources on the broker side while sleeping
             id(mqtt_id)->disable();

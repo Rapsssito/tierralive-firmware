@@ -4,20 +4,23 @@
   subscribe_qos: 1
 
 substitutions:
-  # Public connection error states
-  SENSASOIL_STATE_ERROR_WIFI: "WIFI"
-  SENSASOIL_STATE_ERROR_MQTT: "MQTT"
-  SENSASOIL_STATE_ERROR_MQTT_TIMEOUT: "MQTT_TIMEOUT"
-  SENSASOIL_STATE_ERROR_OTA: "OTA"
-  # Public error states
+  # Deep sleep duration mapping (minutes)
+  SENSASOIL_SLEEP_MAX_MINUTES: "60"
+  SENSASOIL_SLEEP_MIN_MINUTES: "10"
   SENSASOIL_STATE_ERROR_NONE: "0"
-  SENSASOIL_STATE_ERROR_UNKNOWN: "UNKNOWN"
-  SENSASOIL_STATE_ERROR_PANIC: "PANIC"
-  SENSASOIL_STATE_ERROR_WDT: "WDT"
-  SENSASOIL_STATE_ERROR_BROWNOUT: "BROWNOUT"
-  SENSASOIL_STATE_ERROR_EFUSE: "EFUSE"
-  SENSASOIL_STATE_ERROR_PWR_GLITCH: "PWR_GLITCH"
-  SENSASOIL_STATE_ERROR_CPU_LOCKUP: "CPU_LOCKUP"
+  # Public connection error states
+  SENSASOIL_STATE_ERROR_WIFI: "WIFI_ERROR"
+  SENSASOIL_STATE_ERROR_MQTT: "MQTT_ERROR"
+  SENSASOIL_STATE_ERROR_MQTT_ACK_TIMEOUT: "MQTT_ACK_TIMEOUT"
+  SENSASOIL_STATE_ERROR_OTA: "OTA_ERROR"
+  # Public reset error states
+  SENSASOIL_STATE_ERROR_UNKNOWN: "UNKNOWN_RESET"
+  SENSASOIL_STATE_ERROR_PANIC: "PANIC_RESET"
+  SENSASOIL_STATE_ERROR_WDT: "WDT_RESET"
+  SENSASOIL_STATE_ERROR_BROWNOUT: "BROWNOUT_RESET"
+  SENSASOIL_STATE_ERROR_EFUSE: "EFUSE_RESET"
+  SENSASOIL_STATE_ERROR_PWR_GLITCH: "PWR_GLITCH_RESET"
+  SENSASOIL_STATE_ERROR_CPU_LOCKUP: "CPU_LOCKUP_RESET"
 
 globals:
   # INTERNAL #
@@ -61,11 +64,21 @@ sensor:
     icon: mdi:clock-outline
     state_class: measurement
     unit_of_measurement: minutes
-    lambda: ! return id(battery_level).state;
-    filters:
-    - calibrate_linear:
-        - 0.00 -> 60 # 1h
-        - 100.00 -> 15 # 15min
+    lambda: |-
+        const float max_sleep_minutes = ${SENSASOIL_SLEEP_MAX_MINUTES};
+        const float min_sleep_minutes = ${SENSASOIL_SLEEP_MIN_MINUTES};
+        float battery = id(battery_level).state;
+        if (isnan(battery)) {
+          return max_sleep_minutes;
+        }
+
+        if (battery < 0.0f) {
+          battery = 0.0f;
+        } else if (battery > 100.0f) {
+          battery = 100.0f;
+        }
+
+        return max_sleep_minutes - ((max_sleep_minutes - min_sleep_minutes) * (battery / 100.0f));
     <<: *public_sensor
     state_topic: !lambda 'return id(diagnostic_mode) ? id(mqtt_id).get_topic_prefix() + "/s_d" : "";'
 
@@ -115,8 +128,8 @@ text_sensor:
         return std::string("${SENSASOIL_STATE_ERROR_OTA}");
         case ${ERROR_MQTT}:
         return std::string("${SENSASOIL_STATE_ERROR_MQTT}");
-        case ${ERROR_MQTT_TIMEOUT}:
-        return std::string("${SENSASOIL_STATE_ERROR_MQTT_TIMEOUT}");
+        case ${ERROR_MQTT_ACK_TIMEOUT}:
+        return std::string("${SENSASOIL_STATE_ERROR_MQTT_ACK_TIMEOUT}");
         case ${ERROR_NONE}:
         return std::string("${SENSASOIL_STATE_ERROR_NONE}");
         default:
