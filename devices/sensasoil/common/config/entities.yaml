@@ -28,6 +28,7 @@ globals:
     type: bool
     restore_value: yes
     initial_value: "false"
+    update_interval: ${SAVE_TO_STORAGE_INTERNAL_INTERVAL}
 
 sensor:
   - platform: template

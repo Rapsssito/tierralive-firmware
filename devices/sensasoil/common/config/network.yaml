@@ -23,48 +23,54 @@ globals:
   - id: mqtt_broker_address
     type: std::string
     restore_value: yes
+    update_interval: ${SAVE_TO_STORAGE_USER_CONFIG_INTERVAL}
     max_restore_data_length: 254
     initial_value: '"${MQTT_DEFAULT_ADDRESS}"'
   - id: mqtt_broker_port
     type: uint16_t
     restore_value: yes
+    update_interval: ${SAVE_TO_STORAGE_USER_CONFIG_INTERVAL}
     initial_value: ${MQTT_DEFAULT_PORT}
   - id: mqtt_username
     type: std::string
     restore_value: yes
+    update_interval: ${SAVE_TO_STORAGE_USER_CONFIG_INTERVAL}
     max_restore_data_length: 254
     initial_value: '""'
   - id: mqtt_password
     type: std::string
     restore_value: yes
+    update_interval: ${SAVE_TO_STORAGE_USER_CONFIG_INTERVAL}
     max_restore_data_length: 254
     initial_value: '""'
   - id: mqtt_discovery_prefix
     type: std::string
     restore_value: yes
+    update_interval: ${SAVE_TO_STORAGE_USER_CONFIG_INTERVAL}
     max_restore_data_length: 64  # ESPHome's MQTT topic prefix limit
     initial_value: '"homeassistant"'
   - id: wifi_ssid
     type: std::string
     restore_value: yes
+    update_interval: ${SAVE_TO_STORAGE_USER_CONFIG_INTERVAL}
     max_restore_data_length: 254
     initial_value: '""'
   - id: wifi_password
     type: std::string
     restore_value: yes
+    update_interval: ${SAVE_TO_STORAGE_USER_CONFIG_INTERVAL}
     max_restore_data_length: 254
     initial_value: '""'
   - id: mqtt_tls_flags
     type: uint8_t
     restore_value: yes
+    update_interval: ${SAVE_TO_STORAGE_USER_CONFIG_INTERVAL}
     initial_value: "0x03" # {RESERVEDx6, VERIFY_SSL, USE_TLS}
   # INTERNAL #
-  - id: ota_url
-    type: std::string
-    restore_value: no
   - id: mqtt_initial_connection_setup
     type: bool
     restore_value: yes
+    update_interval: ${SAVE_TO_STORAGE_INTERNAL_INTERVAL}
     initial_value: "true"
   - id: mqtt_data_persisted
     type: bool
@@ -73,6 +79,7 @@ globals:
   - id: last_exec_error
     type: uint8_t
     restore_value: yes
+    update_interval: ${SAVE_TO_STORAGE_INTERNAL_INTERVAL}
     initial_value: ${ERROR_NONE}
   - id: received_update_id
     type: std::string

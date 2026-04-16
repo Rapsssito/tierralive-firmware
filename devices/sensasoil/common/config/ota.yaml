@@ -8,6 +8,7 @@ globals:
     # TODO: Enable when ESPHome supports it
     # restore_value: RTC
     restore_value: yes
+    update_interval: ${SAVE_TO_STORAGE_INTERNAL_INTERVAL}
     initial_value: "0"
 
 http_request:

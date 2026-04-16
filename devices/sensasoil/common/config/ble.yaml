@@ -317,6 +317,9 @@ script:
           timeout: 30s
           on_connect:
             - lambda: |-
+                // WARNING: These are only saved to persistent storage when the device shutdown
+                // or the device is on for more than SAVE_TO_STORAGE_USER_CONFIG_INTERVAL.
+                // An unexpected power loss before that will cause the device to "forget" the settings
                 id(wifi_ssid) = id(temp_wifi_ssid);
                 id(wifi_password) = id(temp_wifi_password);
                 id(device_setup_state) = ${SETUP_STATE_INIT};
@@ -361,6 +364,9 @@ script:
             id(mqtt_initial_connection_setup) = true;
             id(improv_state) = improv::State::STATE_PROVISIONED;
             // Update MQTT settings since they are correct
+            // WARNING: These are only saved to persistent storage when the device shutdown
+            // or the device is on for more than SAVE_TO_STORAGE_USER_CONFIG_INTERVAL.
+            // An unexpected power loss before that will cause the device to "forget" the settings
             id(mqtt_broker_address) = new_mqtt_broker_address;
             id(mqtt_broker_port) = new_mqtt_broker_port;
             id(mqtt_username) = new_mqtt_username;
