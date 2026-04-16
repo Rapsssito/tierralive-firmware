@@ -177,6 +177,7 @@ script:
       # Wait for WiFi to be connected
       - wait_until:
           wifi.connected
+      # No need for timeout in the wait_unit since the send_to_deep_sleep is already handling it
       # Housekeeping
       - lambda: |-
           id(send_to_deep_sleep)->stop();
@@ -209,6 +210,7 @@ script:
       # Wait for MQTT to be connected
       - wait_until:
           mqtt.connected
+      # No need for timeout in the wait_unit since the send_to_deep_sleep is already handling it
       # Housekeeping
       - lambda: |-
           id(send_to_deep_sleep)->stop();
@@ -299,7 +301,7 @@ script:
       - wait_until:
           condition:
             - mqtt.connected
-          timeout: 30s
+          timeout: 1min # higher timeout since this could be on a NB-IoT connection
       - lambda: |-
           if(id(mqtt_id)->is_connected()) {
             return;

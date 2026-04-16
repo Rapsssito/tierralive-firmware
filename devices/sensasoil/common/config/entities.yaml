@@ -156,3 +156,11 @@ light:
           min_brightness: 40%
           max_brightness: 100%
     internal: True
+
+button:
+  - platform: factory_reset
+    id: factory_reset_button
+    internal: True
+  - platform: restart
+    id: restart_button
+    internal: True

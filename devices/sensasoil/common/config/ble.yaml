@@ -264,7 +264,14 @@ script:
     then:
       - ble.enable:
       - wait_until:
-          ble.enabled
+          condition: ble.enabled
+          timeout: 1min
+      # Should never happen, but just in case, if BLE fails to enable, we restart the device
+      - lambda: |-
+          if (!id(ble_id)->is_active()) {
+            ESP_LOGE("BLE Server", "Unexpected failure enabling BLE, restarting the device...");
+            id(restart_button).press();
+          }
 
   - id: serve_ble_server
     mode: restart
@@ -282,7 +289,10 @@ script:
       - script.wait: enable_ble
       # If the last communication was more than 5 minutes ago, close the server
       - wait_until:
-          lambda: ! return millis() - id(last_ble_communication_timestamp) >= ${DELAY_BLE_SERVER_CLOSE_MS};
+          condition:
+            - lambda: ! return millis() - id(last_ble_communication_timestamp) >= ${DELAY_BLE_SERVER_CLOSE_MS};
+          timeout:
+            hours: 1 # Add just in case the user keeps accidentally forgets and keeps the BLE connection open
       # No need to turn off the LED here since it could override other status effects
       # Additionally, if the server is closed due to inactivity (and everything is all-right)
       # the device will turn off inmediately after, so it would be pointless to turn off the LED just before that
