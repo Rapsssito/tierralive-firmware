@@ -18,24 +18,6 @@ globals:
     restore_value: no
     initial_value: "0"
 
-bq25186:
-  id: bq25186_charger
-  update_interval: never
-  fast_charge_current: 400
-  watchdog: disabled
-  vindpm_mode: battery_tracking
-  battery_ocp_limit: 1500ma
-  safety_timer: disabled
-  input_current_limit: 665ma
-  enable_push_button: false
-  system_regulation: pass_through
-  mask_charge_status_interrupt: true
-  mask_vindpm_interrupt: true
-  mask_ts_interrupt: true
-  mask_treg_interrupt: true
-  mask_bat_interrupt: true
-  mask_pg_interrupt: true
-
 sensor:
   - platform: max17048
     id: battery_sensor

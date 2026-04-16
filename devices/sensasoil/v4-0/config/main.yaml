@@ -7,6 +7,16 @@ esp32:
   framework:
     type: esp-idf
 
+esphome:
+  on_boot:
+    - priority: 600
+      then:
+        - if:
+            condition:
+              lambda: 'return id(mqtt_initial_connection_setup);'
+            then:
+              - bq25186.apply_configuration: bq25186_charger
+
 i2c:
   - id: i2c_bus
     sda: GPIO11
@@ -15,6 +25,26 @@ i2c:
     scan: false
     sda_pullup_enabled: false
     scl_pullup_enabled: false
+
+
+bq25186:
+  id: bq25186_charger
+  configure_on_boot: false
+  update_interval: never
+  fast_charge_current: 400
+  watchdog: disabled
+  vindpm_mode: battery_tracking
+  battery_ocp_limit: 1500ma
+  safety_timer: disabled
+  input_current_limit: 665ma
+  enable_push_button: false
+  system_regulation: pass_through
+  mask_charge_status_interrupt: true
+  mask_vindpm_interrupt: true
+  mask_ts_interrupt: true
+  mask_treg_interrupt: true
+  mask_bat_interrupt: true
+  mask_pg_interrupt: true
 
 substitutions:
   HARDWARE_VERSION: "4.0"
