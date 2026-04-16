@@ -314,10 +314,18 @@ script:
             - lambda: ! return id(mqtt_data_persisted);
           timeout: 5s
       - lambda: |-
-          // If the data is not persisted, we need to do the initial connection setup
-          if (!id(mqtt_data_persisted)) {
-            id(mqtt_initial_connection_setup) = true;
+          if (id(mqtt_data_persisted)) {
+            id(perform_initial_connection).stop();
+            return;
           }
+          // If the data is not persisted, we need to do the initial connection setup
+          id(mqtt_initial_connection_setup) = true;
+          id(mqtt_id)->disable();
+      - wait_until:
+          condition:
+            - not: mqtt.connected
+          timeout: 1min
+      - script.execute: main_script
 
   - id: deep_sleep_wait_mqtt
     then:
