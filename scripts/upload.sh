@@ -1,12 +1,13 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-if [ $# -lt 1 ]; then
-	echo "Usage: $0 <DEVICE_CONF_PATH>" >&2
+if [ $# -lt 1 ] || [ $# -gt 2 ]; then
+	echo "Usage: $0 <DEVICE_CONF_PATH> [FIRMWARE_VERSION]" >&2
 	exit 1
 fi
 
 DEVICE_CONF_PATH="$1"
+FIRMWARE_VERSION="${2:-}"
 
 SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &> /dev/null && pwd)
 ROOT_DIR="${SCRIPT_DIR}/.."
@@ -14,8 +15,8 @@ ROOT_DIR="${SCRIPT_DIR}/.."
 CONFIG_BASE="${ROOT_DIR}/devices/${DEVICE_CONF_PATH}/config"
 CONFIG_FILE="${CONFIG_BASE}/main.yaml"
 PACKAGE_JSON="${CONFIG_BASE}/../package.json"
-FIRMWARE_VERSION=""
-if [ -f "${PACKAGE_JSON}" ]; then
+
+if [ -z "${FIRMWARE_VERSION}" ] && [ -f "${PACKAGE_JSON}" ]; then
 	FIRMWARE_VERSION=$(python3 - "${PACKAGE_JSON}" <<'PY'
 import json
 import sys
