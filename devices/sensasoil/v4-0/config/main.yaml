@@ -9,7 +9,7 @@ esp32:
 
 esphome:
   on_boot:
-    - priority: 600
+    - priority: -100
       then:
         - if:
             condition:

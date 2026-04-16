@@ -25,14 +25,12 @@ esphome:
   libraries:
     - improv=https://github.com/rapsssito/extended-improv-sdk-cpp
   on_boot:
-    - priority: 800
+    - priority: -100
       then:
         - lambda: |-
             id(manual_reset) = esp_reset_reason() == ESP_RST_UNKNOWN || esp_reset_reason() == ESP_RST_POWERON || esp_reset_reason() == ESP_RST_EXT || esp_reset_reason() == ESP_RST_USB || esp_reset_reason() == ESP_RST_JTAG;
             id(manual_reset) = id(manual_reset) || id(factory_clean);
             id(factory_clean) = false;
-    - priority: -100
-      then:
         - script.execute: main_script
 
 mdns:
