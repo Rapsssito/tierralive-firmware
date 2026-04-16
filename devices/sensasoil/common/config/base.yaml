@@ -2,7 +2,7 @@ substitutions:
   # ESPHome minimum version (kept in sync with esphome.version)
   ESPHOME_MIN_VERSION: !include ../../../../esphome.version
   # Storage interval
-  SAVE_TO_STORAGE_USER_CONFIG_INTERVAL: "20s"
+  SAVE_TO_STORAGE_USER_CONFIG_INTERVAL: "10s"
   SAVE_TO_STORAGE_INTERNAL_INTERVAL: "never"  # only save on shutdown
 
 globals:
