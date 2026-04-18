@@ -13,7 +13,7 @@ esphome:
       then:
         - if:
             condition:
-              lambda: 'return id(manual_reset) || id(mqtt_initial_connection_setup);'
+              lambda: !lambda 'return (id(manual_reset) || id(mqtt_initial_connection_setup));'
             then:
               - bq25186.apply_configuration: bq25186_charger
 
