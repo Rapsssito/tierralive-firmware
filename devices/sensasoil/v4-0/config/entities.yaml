@@ -215,6 +215,11 @@ script:
       # and also prevents other stuff from affecting the battery reading (like powering sensors)
       - component.update: battery_sensor
       - delay: 1ms # yield
+      - component.update: bq25186_charger
+      - delay: 1ms # yield
+      # Update time to sleep based on battery level
+      - component.update: deep_sleep_duration
+      - delay: 1ms # yield
       # Publish state for firmware and hardware versions (automatically published only once handled by sensor)
       - text_sensor.template.publish:
           id: firmware_version
@@ -224,9 +229,7 @@ script:
           id: hardware_version
           state: "${HARDWARE_VERSION}"
       - delay: 1ms # yield
-      # Publish state of non-peripherals
-      - component.update: bq25186_charger
-      - delay: 1ms # yield
+      # Publish state of diagnistics
       - component.update: error_state
       - delay: 1ms # yield
       - component.update: chip_temperature
@@ -235,17 +238,15 @@ script:
       - delay: 1ms # yield
       - component.update: network_signal
       - delay: 1ms # yield
-      # Update time to sleep based on battery level
-      - component.update: deep_sleep_duration
-      - delay: 1ms # yield
       # Turn on peripheral power if not already
       - lambda:
+          // The if is important to prevent resetting the power_sensors_time
           if (!id(power_sensors).state) {
             id(power_sensors)->turn_on();
           }
       - component.update: temperature_humidity_sensor
       - delay: 1ms # yield
-      # Wait 10ms since power_sensors_time
+      # Wait 10ms since power_sensors_time (hardware dependent delay)
       - if:
           condition:
             lambda: !lambda return 10 > (millis() - id(power_sensors_time));

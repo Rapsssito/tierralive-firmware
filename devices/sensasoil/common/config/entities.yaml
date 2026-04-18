@@ -61,7 +61,7 @@ sensor:
   - platform: template
     id: deep_sleep_duration
     name: "Deep sleep duration"
-    entity_category: "diagnostic"
+    entity_category: "diagnostic"  # diagnostic for HA, but always published for external monitoring
     icon: mdi:clock-outline
     state_class: measurement
     unit_of_measurement: minutes
@@ -81,7 +81,7 @@ sensor:
 
         return max_sleep_minutes - ((max_sleep_minutes - min_sleep_minutes) * (battery / 100.0f));
     <<: *public_sensor
-    state_topic: !lambda 'return id(diagnostic_mode) ? id(mqtt_id).get_topic_prefix() + "/s_d" : "";'
+    state_topic: !lambda 'id(mqtt_id).get_topic_prefix() + "/s_d";'
 
 text_sensor:
   - platform: template
