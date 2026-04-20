@@ -20,6 +20,7 @@ substitutions:
   SETUP_STATE_INIT: "0"
   SETUP_STATE_WIFI_CONFIG: "1"
   SETUP_STATE_MQTT_CONFIG: "2"
+  SETUP_STATE_SHUTDOWN: "3"
   # Timeouts
   DELAY_BLE_SERVER_CLOSE_MS: "5 * 60 * 1000"
 
@@ -53,8 +54,7 @@ esp32_ble_server:
   id: ble_server
   manufacturer: TierraLive
   model: SensaSoil_${HARDWARE_VERSION}
-  # TODO: Enable when ESPHome supports it
-  # max_clients: 1
+  max_clients: 1
   on_connect:
     - lambda: |-
         // Refresh sensors on BLE connection to have updated values

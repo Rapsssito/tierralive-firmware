@@ -196,7 +196,7 @@ script:
     then:
       - lambda: |-
           // Skip disconnect script if configuring MQTT or on_wifi_disconnect is running
-          if (id(device_setup_state) == ${SETUP_STATE_MQTT_CONFIG} || id(device_setup_state) == ${SETUP_STATE_WIFI_CONFIG} || id(on_wifi_disconnect)->is_running()) {
+          if (id(device_setup_state) == ${SETUP_STATE_MQTT_CONFIG} || id(device_setup_state) == ${SETUP_STATE_WIFI_CONFIG} || id(device_setup_state) == ${SETUP_STATE_SHUTDOWN} || id(on_wifi_disconnect)->is_running()) {
             id(on_mqtt_disconnect)->stop();
             return;
           }
@@ -349,14 +349,20 @@ script:
               - lambda: ! return id(current_update_id) == id(received_update_id);
             timeout: 1min
         - lambda: |-
+            id(device_setup_state) = ${SETUP_STATE_SHUTDOWN};
+            // As a well behaved device, disconnect from MQTT broker to avoid wasting resources on the broker side while sleeping
+            id(mqtt_id)->disable();
+        - wait_until:
+            condition:
+              - not: mqtt.connected
+            timeout: 10s
+        - lambda: |-
             if(id(current_update_id) == id(received_update_id)) {
               // Everything went fine, go to deep sleep
-              id(send_to_deep_sleep)->execute(100, id(deep_sleep_duration).state * 60 * 1000);
+              id(send_to_deep_sleep)->execute(0, id(deep_sleep_duration).state * 60 * 1000);
             } else {
               ESP_LOGE("deep_sleep_wait_mqtt", "MQTT timeout waiting for update ID to be received. current_update_id: %s, received_update_id: %s", id(current_update_id).c_str(), id(received_update_id).c_str());
               id(last_exec_error) = ${ERROR_MQTT_ACK_TIMEOUT};
               // If the message is not received in time, reset with a short deep sleep to avoid blocking the device if something is wrong with the MQTT connection
-              id(send_to_deep_sleep)->execute(100, ${SLEEP_ERROR_MQTT_MS});
+              id(send_to_deep_sleep)->execute(0, ${SLEEP_ERROR_MQTT_MS});
             }
-            // As a well behaved device, disconnect from MQTT broker to avoid wasting resources on the broker side while sleeping
-            id(mqtt_id)->disable();
