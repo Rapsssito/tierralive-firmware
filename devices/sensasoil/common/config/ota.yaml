@@ -19,13 +19,27 @@ http_request:
   buffer_size_rx: 1024
   buffer_size_tx: 1024
 
-# TODO: Handle safe mode (which should be just check for OTA)
+safe_mode:
+  on_safe_mode:
+    - lambda: |-
+        ESP_LOGW("safe_mode", "Safe mode triggered, forcing OTA check");
+        // Bypass boot interval check while in safe mode.
+        id(ota_check_count) = ${CHECK_OTA_INTERVAL};
+    - script.execute: check_ota
+    - script.wait: check_ota
+    # Give a few minutes for the OTA, so it will execute only if it fails
+    - script.execute:
+        id: send_to_deep_sleep
+        delay_ms: ${DELAY_ERROR_WIFI_MS}
+        sleep_duration_ms: ${SLEEP_ERROR_WIFI_MS}
+
 ota:
   - platform: http_request
     on_begin:
       - light.turn_off: led_status
     on_end:
-      - lambda: ! id(mqtt_initial_connection_setup) = true;
+      - lambda: |-
+          id(mqtt_initial_connection_setup) = true;
     on_error:
       - lambda: |-
           id(last_exec_error) = ${ERROR_OTA};
