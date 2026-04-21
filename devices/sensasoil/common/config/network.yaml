@@ -89,6 +89,10 @@ globals:
     type: std::string
     restore_value: no
     initial_value: '"${INITIAL_UPDATE_ID}"'
+  - id: mqtt_shutdown_complete
+    type: bool
+    restore_value: no
+    initial_value: "false"
 
 mqtt:
   id: mqtt_id
@@ -129,7 +133,7 @@ mqtt:
     mRGunUHBcnWEvgJBQl9nJEiU0Zsnvgc/ubhPgXRR4Xq37Z0j4r7g1SgEEzwxA57d
     emyPxgcYxn/eR44/KJ4EBs+lVDR3veyJm+kXQ99b21/+jh5Xos1AnX5iItreGCc=
     -----END CERTIFICATE-----
-  keepalive: 5min
+  keepalive: 2min  # This value is for manual turn on, for sleep cycle it is defined in the mqtt_setup script
   # TODO: Enable when ESPHome supports it
   # clean_session: RTC
   enable_on_boot: False
@@ -196,7 +200,13 @@ script:
     then:
       - lambda: |-
           // Skip disconnect script if configuring MQTT or on_wifi_disconnect is running
-          if (id(device_setup_state) == ${SETUP_STATE_MQTT_CONFIG} || id(device_setup_state) == ${SETUP_STATE_WIFI_CONFIG} || id(device_setup_state) == ${SETUP_STATE_SHUTDOWN} || id(on_wifi_disconnect)->is_running()) {
+          if (id(device_setup_state) == ${SETUP_STATE_MQTT_CONFIG} || id(device_setup_state) == ${SETUP_STATE_WIFI_CONFIG} || id(on_wifi_disconnect)->is_running()) {
+            id(on_mqtt_disconnect)->stop();
+            return;
+          }
+          if (id(device_setup_state) == ${SETUP_STATE_SHUTDOWN}) {
+            // If we are shutting down, we can ignore MQTT disconnects since we are going to sleep anyway
+            id(mqtt_shutdown_complete) = true;
             id(on_mqtt_disconnect)->stop();
             return;
           }
@@ -288,6 +298,11 @@ script:
           id(mqtt_id).set_username(mqtt_username);
           id(mqtt_id).set_password(mqtt_password);
           id(mqtt_id).set_client_id(mac_base64);
+          if (!id(manual_reset)) {
+            // If not a manual reset, set a very short keepalive
+            // because we are just sending sensor data <1s
+            id(mqtt_id).set_keep_alive(10);
+          }
           if (!id(mqtt_initial_connection_setup) || id(mqtt_discovery_prefix) == "") {
             id(mqtt_id).disable_discovery();
           } else {
@@ -347,14 +362,14 @@ script:
         - wait_until:
             condition:
               - lambda: ! return id(current_update_id) == id(received_update_id);
-            timeout: 1min
+            timeout: 30s
         - lambda: |-
             id(device_setup_state) = ${SETUP_STATE_SHUTDOWN};
             // As a well behaved device, disconnect from MQTT broker to avoid wasting resources on the broker side while sleeping
             id(mqtt_id)->disable();
         - wait_until:
             condition:
-              - not: mqtt.connected
+              - lambda: return id(mqtt_shutdown_complete);
             timeout: 10s
         - lambda: |-
             if(id(current_update_id) == id(received_update_id)) {
