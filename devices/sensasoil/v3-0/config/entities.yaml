@@ -200,7 +200,7 @@ script:
     mode: restart
     then:
       # Turn on peripheral power if not already
-      - lambda:
+      - lambda: |-
           if (!id(power_sensors).state) {
             id(power_sensors)->turn_on();
           }

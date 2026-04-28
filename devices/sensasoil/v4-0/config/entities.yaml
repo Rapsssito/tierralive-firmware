@@ -47,15 +47,6 @@ sensor:
         - clamp:
             min_value: 0
             max_value: 100
-    rate:
-      name: "Battery rate"
-      id: battery_rate
-      device_class: ""
-      entity_category: "diagnostic"
-      state_class: measurement
-      state_topic: !lambda 'return id(diagnostic_mode) ? id(mqtt_id).get_topic_prefix() + "/b_r" : "";'
-      qos: 1
-      subscribe_qos: 1
   - platform: hdc302x
     id: temperature_humidity_sensor
     address: 0x44
@@ -84,7 +75,7 @@ sensor:
     pin: GPIO4
     name: "Soil temperature voltage"
     attenuation: 12db
-    accuracy_decimals: 2
+    accuracy_decimals: 3
     unit_of_measurement: "V"
     entity_category: "diagnostic"
     samples: 20
@@ -110,6 +101,7 @@ sensor:
     name: "Soil volumetric water voltage"
     attenuation: 12db
     unit_of_measurement: "V"
+    accuracy_decimals: 3
     entity_category: "diagnostic"
     samples: 20
     state_class: measurement
@@ -120,14 +112,22 @@ sensor:
     name: "Soil volumetric water"
     icon: mdi:water-percent
     unit_of_measurement: "%"
+    accuracy_decimals: 1
     device_class: MOISTURE
     state_class: measurement
     lambda: ! return id(soil_volumetric_water_v).state;
     filters:
-    - lambda: return 778 * exp(-2.51 * x);
-    - clamp:
-        min_value: 0
-        max_value: 100
+    - lambda: |-
+        // TODO: Add the option for the user to calibrate this
+        float min_v = 0.98; // empirically determined voltage for 0% volumetric water content
+        float max_v = 2.88; // empirically determined voltage for 100% volumetric water content
+        // Normalize the voltage between 0 and 1
+        float x_norm = (x - min_v) / (max_v - min_v);
+        // Apply the exponential model
+        float y = 1.0974 * exp(-2.4215 * x_norm) - 0.0974;
+        // Clamp the result between 0 and 1
+        y = MAX(0, MIN(1, y));
+        return y * 100; // Convert to percentage
     <<: *public_sensor
     state_topic: !lambda return id(mqtt_id).get_topic_prefix() + "/s_w";
 
@@ -238,20 +238,19 @@ script:
       - delay: 1ms # yield
       - component.update: network_signal
       - delay: 1ms # yield
+      - component.update: temperature_humidity_sensor
       # Turn on peripheral power if not already
-      - lambda:
+      - lambda: |-
           // The if is important to prevent resetting the power_sensors_time
           if (!id(power_sensors).state) {
             id(power_sensors)->turn_on();
           }
-      - component.update: temperature_humidity_sensor
-      - delay: 1ms # yield
-      # Wait 10ms since power_sensors_time (hardware dependent delay)
+      # Wait (hardware dependent delay)
       - if:
           condition:
-            lambda: !lambda return 10 > (millis() - id(power_sensors_time));
+            lambda: !lambda return 30 > (millis() - id(power_sensors_time));
           then:
-            - delay: !lambda return 10 - (millis() - id(power_sensors_time));
+            - delay: !lambda return 30 - (millis() - id(power_sensors_time));
       # Update peripherals voltage sensors
       - component.update: soil_temperature_v
       - delay: 1ms # yield
