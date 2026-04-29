@@ -112,16 +112,16 @@ sensor:
     name: "Soil volumetric water"
     icon: mdi:water-percent
     unit_of_measurement: "%"
-    accuracy_decimals: 1
+    accuracy_decimals: 0
     device_class: MOISTURE
     state_class: measurement
     lambda: ! return id(soil_volumetric_water_v).state;
     filters:
     - lambda: |-
         // TODO: Add the option for the user to calibrate this
-        float CALIBRATED_TEMP = 24.0f; // temperature when the calibration was done
-        float CALIBRATED_MIN_V = 0.988f; // empirically determined voltage for 0% volumetric water content
-        float CALIBRATED_MAX_V = 2.879f; // empirically determined voltage for 100% volumetric water content
+        float CALIBRATED_TEMP = 21.9f; // temperature when the calibration was done
+        float CALIBRATED_MIN_V = 0.970f; // empirically determined voltage for 0% volumetric water content
+        float CALIBRATED_MAX_V = 2.876f; // empirically determined voltage for 100% volumetric water content
         // Compensate the voltage based on temperature
         float temp_coefficient = -0.0025f; // empirically determined temperature coefficient (voltage change per degree Celsius)
         float x_true = x + temp_coefficient * (id(soil_temperature).state - CALIBRATED_TEMP);
