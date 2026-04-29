@@ -119,10 +119,14 @@ sensor:
     filters:
     - lambda: |-
         // TODO: Add the option for the user to calibrate this
-        float min_v = 0.98; // empirically determined voltage for 0% volumetric water content
-        float max_v = 2.88; // empirically determined voltage for 100% volumetric water content
+        float CALIBRATED_TEMP = 24.0f; // temperature when the calibration was done
+        float CALIBRATED_MIN_V = 0.988f; // empirically determined voltage for 0% volumetric water content
+        float CALIBRATED_MAX_V = 2.879f; // empirically determined voltage for 100% volumetric water content
+        // Compensate the voltage based on temperature
+        float temp_coefficient = -0.0025f; // empirically determined temperature coefficient (voltage change per degree Celsius)
+        float x_true = x + temp_coefficient * (id(soil_temperature).state - CALIBRATED_TEMP);
         // Normalize the voltage between 0 and 1
-        float x_norm = (x - min_v) / (max_v - min_v);
+        float x_norm = (x_true - CALIBRATED_MIN_V) / (CALIBRATED_MAX_V - CALIBRATED_MIN_V);
         // Apply the exponential model
         float y = 1.0974 * exp(-2.4215 * x_norm) - 0.0974;
         // Clamp the result between 0 and 1
