@@ -166,14 +166,6 @@ binary_sensor:
     name: "Charging"
     device_class: BATTERY_CHARGING
     icon: mdi:battery-charging
-    on_state:
-      then:
-        - if:
-            condition:
-              - ble.enabled
-            then:
-              - ble_server.characteristic.notify:
-                  id: ble_battery_status_char
     qos: 1
     subscribe_qos: 1
     state_topic: !lambda return id(mqtt_id).get_topic_prefix() + "/b_c";
@@ -243,3 +235,13 @@ script:
       - component.update: soil_temperature
       - component.update: soil_volumetric_water
       - delay: 1ms # yield
+      # Update BLE info characteristic with the new sensor readings
+      - if:
+          condition:
+            - ble.enabled
+          then:
+            - ble_server.characteristic.notify:
+                id: ble_battery_status_char
+            - ble_server.characteristic.notify:
+                id: ble_sensasoil_info_char
+

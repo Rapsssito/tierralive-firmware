@@ -112,16 +112,15 @@ sensor:
     name: "Soil volumetric water"
     icon: mdi:water-percent
     unit_of_measurement: "%"
-    accuracy_decimals: 0
+    accuracy_decimals: 1
     device_class: MOISTURE
     state_class: measurement
     lambda: ! return id(soil_volumetric_water_v).state;
     filters:
     - lambda: |-
-        // TODO: Add the option for the user to calibrate this
-        float CALIBRATED_TEMP = 21.9f; // temperature when the calibration was done
-        float CALIBRATED_MIN_V = 0.970f; // empirically determined voltage for 0% volumetric water content
-        float CALIBRATED_MAX_V = 2.876f; // empirically determined voltage for 100% volumetric water content
+        float CALIBRATED_TEMP = id(soil_moisture_calibration_temperature); // temperature when the calibration was done
+        float CALIBRATED_MIN_V = id(soil_moisture_calibration_min_voltage); // empirically determined voltage for 0% volumetric water content
+        float CALIBRATED_MAX_V = id(soil_moisture_calibration_max_voltage); // empirically determined voltage for 100% volumetric water content
         // Compensate the voltage based on temperature
         float temp_coefficient = -0.0025f; // empirically determined temperature coefficient (voltage change per degree Celsius)
         float x_true = x + temp_coefficient * (id(soil_temperature).state - CALIBRATED_TEMP);
@@ -160,14 +159,6 @@ binary_sensor:
       qos: 1
       subscribe_qos: 1
       state_topic: !lambda return id(mqtt_id).get_topic_prefix() + "/b_c";
-      on_state:
-        then:
-          - if:
-              condition:
-                - ble.enabled
-              then:
-                - ble_server.characteristic.notify:
-                    id: ble_battery_status_char
   - platform: gpio
     id: factory_reset_internal_button
     use_interrupt: True
@@ -268,3 +259,12 @@ script:
       - delay: 1ms # yield
       - component.update: soil_volumetric_water
       - delay: 1ms # yield
+      # Update BLE info characteristic with the new sensor readings
+      - if:
+          condition:
+            - ble.enabled
+          then:
+            - ble_server.characteristic.notify:
+                id: ble_battery_status_char
+            - ble_server.characteristic.notify:
+                id: ble_sensasoil_info_char

@@ -23,6 +23,21 @@ substitutions:
   SENSASOIL_STATE_ERROR_CPU_LOCKUP: "CPU_LOCKUP_RESET"
 
 globals:
+  - id: soil_moisture_calibration_temperature
+    type: float
+    restore_value: yes
+    initial_value: "21.9f"
+    update_interval: ${SAVE_TO_STORAGE_USER_CONFIG_INTERVAL}
+  - id: soil_moisture_calibration_max_voltage
+    type: float
+    restore_value: yes
+    initial_value: "2.876f"
+    update_interval: ${SAVE_TO_STORAGE_USER_CONFIG_INTERVAL}
+  - id: soil_moisture_calibration_min_voltage
+    type: float
+    restore_value: yes
+    initial_value: "0.970f"
+    update_interval: ${SAVE_TO_STORAGE_USER_CONFIG_INTERVAL}
   # INTERNAL #
   - id: diagnostic_mode
     type: bool
