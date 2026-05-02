@@ -4,6 +4,11 @@
   subscribe_qos: 1
 
 globals:
+  - id: soil_sensor_version
+    type: sensasoil::SoilProbeVersion
+    restore_value: yes
+    initial_value: "sensasoil::SoilProbeVersion::V3"
+    update_interval: ${SAVE_TO_STORAGE_USER_CONFIG_INTERVAL}
   # INTERNAL #
   - id: power_sensors_time
     type: unsigned long
@@ -42,7 +47,7 @@ sensor:
     unit_of_measurement: "V"
     entity_category: "diagnostic"
     accuracy_decimals: 2
-    samples: 20
+    samples: 64
     filters:
     - calibrate_linear:
           - 1.91 -> 3.3
@@ -80,55 +85,28 @@ sensor:
     <<: *public_sensor
   - platform: adc
     id: soil_temperature_v
-    pin: GPIO1
     name: "Soil temperature voltage"
     attenuation: 12db
-    accuracy_decimals: 2
+    accuracy_decimals: 3
     unit_of_measurement: "V"
     entity_category: "diagnostic"
-    samples: 20
+    samples: 64
     state_class: measurement
     state_topic: !lambda 'return id(diagnostic_mode) ? id(mqtt_id).get_topic_prefix() + "/s_tv" : "";'
     <<: *public_sensor
-  - platform: template
-    id: soil_temperature
-    name: "Soil temperature"
-    icon: mdi:thermometer-probe
-    unit_of_measurement: "°C"
-    accuracy_decimals: 1
-    device_class: TEMPERATURE
-    state_class: measurement
-    lambda: ! return id(soil_temperature_v).state;
-    filters:
-    - lambda: return 298.15 / (1 + 298.15 / 4050 * log(3.3 / x - 1)) - 273.15;
-    state_topic: !lambda return id(mqtt_id).get_topic_prefix() + "/s_t";
-    <<: *public_sensor
+    pin: GPIO1
   - platform: adc
     id: soil_volumetric_water_v
-    pin: GPIO4
     name: "Soil volumetric water voltage"
     attenuation: 12db
     unit_of_measurement: "V"
+    accuracy_decimals: 3
     entity_category: "diagnostic"
-    samples: 20
+    samples: 64
     state_class: measurement
     state_topic: !lambda 'return id(diagnostic_mode) ? id(mqtt_id).get_topic_prefix() + "/s_wv" : "";'
     <<: *public_sensor
-  - platform: template
-    id: soil_volumetric_water
-    name: "Soil volumetric water"
-    icon: mdi:water-percent
-    unit_of_measurement: "%"
-    device_class: MOISTURE
-    state_class: measurement
-    lambda: ! return id(soil_volumetric_water_v).state;
-    filters:
-    - lambda: return 778 * exp(-2.51 * x);
-    - clamp:
-        min_value: 0
-        max_value: 100
-    <<: *public_sensor
-    state_topic: !lambda return id(mqtt_id).get_topic_prefix() + "/s_w";
+    pin: GPIO4
 
 binary_sensor:
   - platform: gpio
@@ -191,11 +169,6 @@ script:
   - id: refresh_sensors_script
     mode: restart
     then:
-      # Turn on peripheral power if not already
-      - lambda: |-
-          if (!id(power_sensors).state) {
-            id(power_sensors)->turn_on();
-          }
       # Publish state for firmware and hardware versions (automatically published only once handled by sensor)
       - text_sensor.template.publish:
           id: firmware_version
@@ -218,16 +191,30 @@ script:
       - component.update: battery_level
       # Update time to sleep based on battery level
       - component.update: deep_sleep_duration
-      # Wait 150ms since power_sensors_time
-      - if:
-          condition:
-            lambda: !lambda return 150 > (millis() - id(power_sensors_time));
-          then:
-            - delay: !lambda return 150 - (millis() - id(power_sensors_time));
       # Update peripherals voltage sensors
-      - component.update: soil_temperature_v
-      - component.update: temperature_humidity_sensor
+      # Turn on peripheral power if not already
+      - lambda: |-
+          // The if is important to prevent resetting the power_sensors_time
+          if (!id(power_sensors).state) {
+            id(power_sensors)->turn_on();
+          }
+      # Wait (hardware dependent delay)
+      - delay: !lambda |-
+          const unsigned long elapsed = millis() - id(power_sensors_time);
+          return elapsed < 50 ? 50 - elapsed : 0;
       - component.update: soil_volumetric_water_v
+      - delay: 1ms # yield
+      # Wait (hardware dependent delay)
+      - delay: !lambda |-
+          const unsigned long elapsed = millis() - id(power_sensors_time);
+          return elapsed < 100 ? 100 - elapsed : 0;
+      - component.update: soil_temperature_v
+      - delay: 1ms # yield
+      # Wait (hardware dependent delay)
+      - delay: !lambda |-
+          const unsigned long elapsed = millis() - id(power_sensors_time);
+          return elapsed < 150 ? 150 - elapsed : 0;
+      - component.update: temperature_humidity_sensor
       - delay: 1ms # yield
       # Turn off peripheral power
       - switch.turn_off: power_sensors

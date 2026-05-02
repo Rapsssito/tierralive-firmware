@@ -12,6 +12,11 @@ external_components:
   subscribe_qos: 1
 
 globals:
+  - id: soil_sensor_version
+    type: sensasoil::SoilProbeVersion
+    restore_value: yes
+    initial_value: "sensasoil::SoilProbeVersion::V4"
+    update_interval: ${SAVE_TO_STORAGE_USER_CONFIG_INTERVAL}
   # INTERNAL #
   - id: power_sensors_time
     type: unsigned long
@@ -72,67 +77,28 @@ sensor:
       subscribe_qos: 1
   - platform: adc
     id: soil_temperature_v
-    pin: GPIO4
     name: "Soil temperature voltage"
     attenuation: 12db
     accuracy_decimals: 3
     unit_of_measurement: "V"
     entity_category: "diagnostic"
-    samples: 20
+    samples: 64
     state_class: measurement
     state_topic: !lambda 'return id(diagnostic_mode) ? id(mqtt_id).get_topic_prefix() + "/s_tv" : "";'
     <<: *public_sensor
-  - platform: template
-    id: soil_temperature
-    name: "Soil temperature"
-    icon: mdi:thermometer-probe
-    unit_of_measurement: "°C"
-    accuracy_decimals: 1
-    device_class: TEMPERATURE
-    state_class: measurement
-    lambda: ! return id(soil_temperature_v).state;
-    filters:
-    - lambda: return 298.15 / (1 + 298.15 / 4050 * log(3.3 / x - 1)) - 273.15;
-    state_topic: !lambda return id(mqtt_id).get_topic_prefix() + "/s_t";
-    <<: *public_sensor
+    pin: GPIO4
   - platform: adc
     id: soil_volumetric_water_v
-    pin: GPIO5
     name: "Soil volumetric water voltage"
     attenuation: 12db
     unit_of_measurement: "V"
     accuracy_decimals: 3
     entity_category: "diagnostic"
-    samples: 20
+    samples: 64
     state_class: measurement
     state_topic: !lambda 'return id(diagnostic_mode) ? id(mqtt_id).get_topic_prefix() + "/s_wv" : "";'
     <<: *public_sensor
-  - platform: template
-    id: soil_volumetric_water
-    name: "Soil volumetric water"
-    icon: mdi:water-percent
-    unit_of_measurement: "%"
-    accuracy_decimals: 1
-    device_class: MOISTURE
-    state_class: measurement
-    lambda: ! return id(soil_volumetric_water_v).state;
-    filters:
-    - lambda: |-
-        float CALIBRATED_TEMP = id(soil_moisture_calibration_temperature); // temperature when the calibration was done
-        float CALIBRATED_MIN_V = id(soil_moisture_calibration_min_voltage); // empirically determined voltage for 0% volumetric water content
-        float CALIBRATED_MAX_V = id(soil_moisture_calibration_max_voltage); // empirically determined voltage for 100% volumetric water content
-        // Compensate the voltage based on temperature
-        float temp_coefficient = -0.0025f; // empirically determined temperature coefficient (voltage change per degree Celsius)
-        float x_true = x + temp_coefficient * (id(soil_temperature).state - CALIBRATED_TEMP);
-        // Normalize the voltage between 0 and 1
-        float x_norm = (x_true - CALIBRATED_MIN_V) / (CALIBRATED_MAX_V - CALIBRATED_MIN_V);
-        // Apply the exponential model
-        float y = 1.0974 * exp(-2.4215 * x_norm) - 0.0974;
-        // Clamp the result between 0 and 1
-        y = MAX(0, MIN(1, y));
-        return y * 100; // Convert to percentage
-    <<: *public_sensor
-    state_topic: !lambda return id(mqtt_id).get_topic_prefix() + "/s_w";
+    pin: GPIO5
 
 binary_sensor:
   - platform: bq25186
@@ -241,15 +207,17 @@ script:
             id(power_sensors)->turn_on();
           }
       # Wait (hardware dependent delay)
-      - if:
-          condition:
-            lambda: !lambda return 30 > (millis() - id(power_sensors_time));
-          then:
-            - delay: !lambda return 30 - (millis() - id(power_sensors_time));
+      - delay: !lambda |-
+          const unsigned long elapsed = millis() - id(power_sensors_time);
+          return elapsed < 50 ? 50 - elapsed : 0;
+      - component.update: soil_volumetric_water_v
+      - delay: 1ms # yield
+      # Wait (hardware dependent delay)
+      - delay: !lambda |-
+          const unsigned long elapsed = millis() - id(power_sensors_time);
+          return elapsed < 100 ? 100 - elapsed : 0;
       # Update peripherals voltage sensors
       - component.update: soil_temperature_v
-      - delay: 1ms # yield
-      - component.update: soil_volumetric_water_v
       - delay: 1ms # yield
       # Turn off peripheral power
       - switch.turn_off: power_sensors
