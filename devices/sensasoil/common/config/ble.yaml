@@ -11,7 +11,6 @@ substitutions:
   TIERRALIVE_INFO_UUID: "3b351f04-1db6-49f3-b155-cb5d18c80001"
   TIERRALIVE_SENSASOIL_CODE: "0x01"
   TIERRALIVE_SENSASOIL_INFO_UUID: "3b351f04-1db6-49f3-b155-cb5d18c80002"
-  TIERRALIVE_SENSASOIL_CALIBRATE_UUID: "3b351f04-1db6-49f3-b155-cb5d18c80003"
   # Timeouts
   DELAY_BLE_SERVER_CLOSE_MS: "5 * 60 * 1000"
 
@@ -135,36 +134,6 @@ esp32_ble_server:
             // Soil volumetric water voltage
             buf.put_float(id(soil_volumetric_water_v).state);
             return buf.get_data();
-        - uuid: ${TIERRALIVE_SENSASOIL_CALIBRATE_UUID}
-          read: true
-          write: true
-          value: !lambda |-
-            // Build payload: 3x4-byte floats = 12 bytes total
-            bytebuffer::ByteBuffer buf = bytebuffer::ByteBuffer(12);
-            // Calibration temperature
-            buf.put_float(id(soil_moisture_calibration_temperature));
-            // Calibration max voltage
-            buf.put_float(id(soil_moisture_calibration_max_voltage));
-            // Calibration min voltage
-            buf.put_float(id(soil_moisture_calibration_min_voltage));
-            return buf.get_data();
-          on_write:
-            then:
-              - lambda: |-
-                  // Must receive exactly 12 bytes (3 floats) to perform calibration
-                  if (x.size() != 12) {
-                    ESP_LOGW("Calibration", "Received calibration data with invalid length: expected 12, got %d", x.size());
-                    return;
-                  }
-                  bytebuffer::ByteBuffer buf = bytebuffer::ByteBuffer::wrap(x);
-                  float calibration_temp = buf.get_float();
-                  float max_voltage = buf.get_float();
-                  float min_voltage = buf.get_float();
-                  ESP_LOGD("Calibration", "Received calibration data: temp=%.2f, max_voltage=%.3f, min_voltage=%.3f", calibration_temp, max_voltage, min_voltage);
-                  // Update calibration parameters
-                  id(soil_moisture_calibration_temperature) = calibration_temp;
-                  id(soil_moisture_calibration_max_voltage) = max_voltage;
-                  id(soil_moisture_calibration_min_voltage) = min_voltage;
     - uuid: ${IMPROV_SERVICE_UUID}
       advertise: true
       characteristics:
@@ -276,6 +245,29 @@ esp32_ble_server:
                           case sensasoil::ExtendedImprovCommand::REFRESH_SENSORS:
                             ESP_LOGD("ExtendedImprov", "Refresh sensors command received");
                             id(refresh_sensors_script)->execute();
+                            break;
+                          case sensasoil::ExtendedImprovCommand::CALIBRATE_SENSORS: {
+                            ESP_LOGD("ExtendedImprov", "Calibrate sensors command received");
+                            if (!ensure_expected_length(command.data, 5)) break;
+                            // Receive: probe version (1 byte) + 3x4-byte floats in command.data[1-4]
+                            uint8_t probe_version = command.data[1][0];
+                            bytebuffer::ByteBuffer temp_buf = bytebuffer::ByteBuffer::wrap(command.data[2]);
+                            float calibration_temp = temp_buf.get_float();
+                            bytebuffer::ByteBuffer max_buf = bytebuffer::ByteBuffer::wrap(command.data[3]);
+                            float max_voltage = max_buf.get_float();
+                            bytebuffer::ByteBuffer min_buf = bytebuffer::ByteBuffer::wrap(command.data[4]);
+                            float min_voltage = min_buf.get_float();
+                            ESP_LOGD("Calibration", "Received calibration data: probe_version=%d, temp=%.2f, max_voltage=%.3f, min_voltage=%.3f", probe_version, calibration_temp, max_voltage, min_voltage);
+                            // Update calibration parameters
+                            id(soil_probe_version) = static_cast<sensasoil::SoilProbeVersion>(probe_version);
+                            id(soil_probe_calibration_temperature) = calibration_temp;
+                            id(soil_probe_calibration_max_voltage) = max_voltage;
+                            id(soil_probe_calibration_min_voltage) = min_voltage;
+                            break;
+                          }
+                          case sensasoil::ExtendedImprovCommand::CALIBRATION_VIEW_SETTINGS:
+                            ESP_LOGD("ExtendedImprov", "Request of calibration settings received");
+                            id(improv_calibration_show_config)->execute();
                             break;
                           default:
                             ESP_LOGW("ExtendedImprov", "Unknown Improv custom payload");
@@ -466,6 +458,32 @@ script:
               { static_cast<uint8_t>(sensasoil::ExtendedImprovCommand::WIFI_VIEW_SETTINGS) },
               id(wifi_ssid),
               ip_buf
+          };
+          id(improv_rpc_result)->set_value(improv::build_rpc_response(improv::CUSTOM, response, true));
+          id(improv_rpc_result)->notify();
+
+  - id: improv_calibration_show_config
+    then:
+      - lambda: |-
+          // Build calibration data response: 1 byte probe version + 3x4-byte floats          
+          bytebuffer::ByteBuffer temp_buf = bytebuffer::ByteBuffer(4);
+          temp_buf.put_float(id(soil_probe_calibration_temperature));
+          std::vector<uint8_t> cal_temp_buf = temp_buf.get_data();
+          
+          bytebuffer::ByteBuffer max_buf = bytebuffer::ByteBuffer(4);
+          max_buf.put_float(id(soil_probe_calibration_max_voltage));
+          std::vector<uint8_t> cal_max_buf = max_buf.get_data();
+          
+          bytebuffer::ByteBuffer min_buf = bytebuffer::ByteBuffer(4);
+          min_buf.put_float(id(soil_probe_calibration_min_voltage));
+          std::vector<uint8_t> cal_min_buf = min_buf.get_data();
+          
+          std::vector<std::string> response = {
+              { static_cast<uint8_t>(sensasoil::ExtendedImprovCommand::CALIBRATION_VIEW_SETTINGS) },
+              { static_cast<uint8_t>(id(soil_probe_version)) },
+              std::string(cal_temp_buf.begin(), cal_temp_buf.end()),
+              std::string(cal_max_buf.begin(), cal_max_buf.end()),
+              std::string(cal_min_buf.begin(), cal_min_buf.end())
           };
           id(improv_rpc_result)->set_value(improv::build_rpc_response(improv::CUSTOM, response, true));
           id(improv_rpc_result)->notify();

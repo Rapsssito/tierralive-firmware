@@ -12,7 +12,7 @@ external_components:
   subscribe_qos: 1
 
 globals:
-  - id: soil_sensor_version
+  - id: soil_probe_version
     type: sensasoil::SoilProbeVersion
     restore_value: yes
     initial_value: "sensasoil::SoilProbeVersion::V4"

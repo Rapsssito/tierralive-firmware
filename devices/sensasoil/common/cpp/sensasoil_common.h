@@ -18,13 +18,15 @@ enum class BleSetupState : uint8_t {
  * for TierraLive devices
  */
 enum class ExtendedImprovCommand : uint8_t {
-  MQTT_CHANGE_SETTINGS = 1,  ///< Change MQTT broker settings
-  FACTORY_RESET = 2,         ///< Reset device to factory defaults
-  MQTT_VIEW_SETTINGS = 3,    ///< View current MQTT settings
-  WIFI_VIEW_SETTINGS = 4,    ///< View current WiFi settings
-  ENABLE_DIAGNOSTIC = 5,     ///< Enable diagnostic mode
-  MQTT_DISCOVERY_PREFIX = 6, ///< Set MQTT discovery prefix
-  REFRESH_SENSORS = 7        ///< Refresh sensor readings
+  MQTT_CHANGE_SETTINGS = 1,     ///< Change MQTT broker settings
+  FACTORY_RESET = 2,            ///< Reset device to factory defaults
+  MQTT_VIEW_SETTINGS = 3,       ///< View current MQTT settings
+  WIFI_VIEW_SETTINGS = 4,       ///< View current WiFi settings
+  ENABLE_DIAGNOSTIC = 5,        ///< Enable diagnostic mode
+  MQTT_DISCOVERY_PREFIX = 6,    ///< Set MQTT discovery prefix
+  REFRESH_SENSORS = 7,          ///< Refresh sensor readings
+  CALIBRATE_SENSORS = 8,        ///< Calibrate soil moisture sensor
+  CALIBRATION_VIEW_SETTINGS = 9 ///< View current calibration settings
 };
 
 /**
@@ -72,17 +74,17 @@ const float compute_soil_vwc(const float voltage, const float temperature,
   case SoilProbeVersion::V5: {
     // Compensate the voltage based on temperature
     const float TEMP_COEFFICIENT = -0.0025f;
-      float x_true =
-          !std::isnan(temperature)
-              ? voltage + TEMP_COEFFICIENT * (temperature - CALIBRATED_TEMP)
-              : voltage;
-      // Normalize the voltage between 0 and 1
-      float x_norm =
-          (x_true - CALIBRATED_MIN_V) / (CALIBRATED_MAX_V - CALIBRATED_MIN_V);
-      // Apply the exponential model
-      result = 1.0974 * exp(-2.4215 * x_norm) - 0.0974;
-      break;
-    }
+    float x_true =
+        !std::isnan(temperature)
+            ? voltage + TEMP_COEFFICIENT * (temperature - CALIBRATED_TEMP)
+            : voltage;
+    // Normalize the voltage between 0 and 1
+    float x_norm =
+        (x_true - CALIBRATED_MIN_V) / (CALIBRATED_MAX_V - CALIBRATED_MIN_V);
+    // Apply the exponential model
+    result = 1.0974 * exp(-2.4215 * x_norm) - 0.0974;
+    break;
+  }
   }
   // Ensure the final result is between 0% and 100%
   result = MAX(0, MIN(1, result));
