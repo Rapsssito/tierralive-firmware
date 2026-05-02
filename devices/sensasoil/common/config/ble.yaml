@@ -6,14 +6,6 @@ substitutions:
   IMPROV_RPC_COMMAND_UUID: "00467768-6228-2272-4663-277478268003"
   IMPROV_RPC_RESULT_UUID: "00467768-6228-2272-4663-277478268004"
   IMPROV_CAPABILITIES_UUID: "00467768-6228-2272-4663-277478268005"
-  # ExtendedImprov commands
-  E_IMPROV_MQTT_CHANGE_SETTINGS_COMMAND_ID: "1"
-  E_IMPROV_FACTORY_RESET_COMMAND_ID: "2"
-  E_IMPROV_MQTT_VIEW_SETTINGS_COMMAND_ID: "3"
-  E_IMPROV_WIFI_VIEW_SETTINGS_COMMAND_ID: "4"
-  E_IMPROV_ENABLE_DIAGNOSTIC_COMMAND_ID: "5"
-  E_IMPROV_MQTT_DISCOVERY_PREFIX_COMMAND_ID: "6"
-  E_IMPROV_REFRESH_SENSORS_COMMAND_ID: "7"
   # TierraLive BLE
   TIERRALIVE_SERVICE_UUID: "3b351f04-1db6-49f3-b155-cb5d18c80000"
   TIERRALIVE_INFO_UUID: "3b351f04-1db6-49f3-b155-cb5d18c80001"
@@ -234,8 +226,8 @@ esp32_ble_server:
                       }
                       case improv::CUSTOM: {
                         ESP_LOGD("ExtendedImprov", "Custom command received");
-                        switch(command.data[0][0]) {
-                          case ${E_IMPROV_MQTT_CHANGE_SETTINGS_COMMAND_ID}:
+                        switch(static_cast<sensasoil::ExtendedImprovCommand>(command.data[0][0])) {
+                          case sensasoil::ExtendedImprovCommand::MQTT_CHANGE_SETTINGS:
                             if (id(improv_state) == improv::State::STATE_PROVISIONING) {
                               ESP_LOGD("ExtendedImprov", "MQTT settings received, but not authorized");
                               set_error_notify_and_clear(improv::Error::ERROR_NOT_AUTHORIZED);
@@ -247,19 +239,19 @@ esp32_ble_server:
                             id(improv_status_characteristic)->notify();
                             id(improv_mqtt_configure)->execute(std::string(command.data[1].begin(), command.data[1].end()), bytebuffer::ByteBuffer::wrap(command.data[2]).get_uint16(), std::string(command.data[3].begin(), command.data[3].end()), std::string(command.data[4].begin(), command.data[4].end()), command.data[5][0]);
                             break;
-                          case ${E_IMPROV_FACTORY_RESET_COMMAND_ID}:
+                          case sensasoil::ExtendedImprovCommand::FACTORY_RESET:
                             ESP_LOGD("ExtendedImprov", "Factory reset received");
                             id(factory_reset_button).press();
                             break;
-                          case ${E_IMPROV_MQTT_VIEW_SETTINGS_COMMAND_ID}:
+                          case sensasoil::ExtendedImprovCommand::MQTT_VIEW_SETTINGS:
                             ESP_LOGD("ExtendedImprov", "Request of MQTT settings received");
                             id(improv_wifi_mqtt_show_config)->execute();
                             break;
-                          case ${E_IMPROV_WIFI_VIEW_SETTINGS_COMMAND_ID}:
+                          case sensasoil::ExtendedImprovCommand::WIFI_VIEW_SETTINGS:
                             ESP_LOGD("ExtendedImprov", "Request of WiFi settings received");
                             id(improv_wifi_ble_show_config)->execute();
                             break;
-                          case ${E_IMPROV_ENABLE_DIAGNOSTIC_COMMAND_ID}: {
+                          case sensasoil::ExtendedImprovCommand::ENABLE_DIAGNOSTIC: {
                             ESP_LOGD("ExtendedImprov", "Enable diagnostic command received");
                             if (!ensure_expected_length(command.data, 2)) break;
                             bool enable_diagnostic = command.data[1][0] != 0;
@@ -272,7 +264,7 @@ esp32_ble_server:
                             id(main_script)->execute();
                             break;
                           }
-                          case ${E_IMPROV_MQTT_DISCOVERY_PREFIX_COMMAND_ID}: {
+                          case sensasoil::ExtendedImprovCommand::MQTT_DISCOVERY_PREFIX: {
                             ESP_LOGD("ExtendedImprov", "MQTT discovery prefix command received");
                             if (!ensure_expected_length(command.data, 2)) break;
                             std::string new_prefix(command.data[1].begin(), command.data[1].end());
@@ -281,11 +273,10 @@ esp32_ble_server:
                             id(main_script)->execute();
                             break;
                           }
-                          case ${E_IMPROV_REFRESH_SENSORS_COMMAND_ID}: {
+                          case sensasoil::ExtendedImprovCommand::REFRESH_SENSORS:
                             ESP_LOGD("ExtendedImprov", "Refresh sensors command received");
                             id(refresh_sensors_script)->execute();
                             break;
-                          }
                           default:
                             ESP_LOGW("ExtendedImprov", "Unknown Improv custom payload");
                             break;
@@ -449,7 +440,7 @@ script:
           mqtt_port_str[0] = static_cast<char>(id(mqtt_broker_port) & 0xFF);
           mqtt_port_str[1] = static_cast<char>((id(mqtt_broker_port) >> 8) & 0xFF);
           std::vector<std::string> response = {
-              {${E_IMPROV_MQTT_VIEW_SETTINGS_COMMAND_ID}},                                    
+              { static_cast<uint8_t>(sensasoil::ExtendedImprovCommand::MQTT_VIEW_SETTINGS) },
               id(mqtt_broker_address),
               mqtt_port_str,
               {id(mqtt_tls_flags)},
@@ -472,7 +463,7 @@ script:
             std::strncpy(ip_buf, "", sizeof(ip_buf));
           }
           std::vector<std::string> response = {
-              {${E_IMPROV_WIFI_VIEW_SETTINGS_COMMAND_ID}},                                    
+              { static_cast<uint8_t>(sensasoil::ExtendedImprovCommand::WIFI_VIEW_SETTINGS) },
               id(wifi_ssid),
               ip_buf
           };
