@@ -43,9 +43,6 @@ enum class ErrorCode : uint8_t {
  */
 enum class SoilProbeVersion : uint8_t { V3, V4, V5 };
 
-// Sentinel value for invalid temperature readings
-const float INVALID_TEMPERATURE = -999.0f;
-
 /**
  * @brief Compute soil volumetric water content (VWC) based on sensor readings
  * @param voltage Current raw voltage reading from the soil sensor
@@ -61,6 +58,9 @@ const float compute_soil_vwc(const float voltage, const float temperature,
                              const float CALIBRATED_MIN_V,
                              const float CALIBRATED_MAX_V,
                              const SoilProbeVersion version) {
+  if (std::isnan(voltage) || voltage < 0) {
+    return NAN; // Invalid voltage reading
+  }
   float result = 0;
   switch (version) {
   case SoilProbeVersion::V3: {
@@ -72,9 +72,8 @@ const float compute_soil_vwc(const float voltage, const float temperature,
   case SoilProbeVersion::V5: {
     // Compensate the voltage based on temperature
     const float TEMP_COEFFICIENT = -0.0025f;
-    if (temperature != INVALID_TEMPERATURE) {
       float x_true =
-          temperature != INVALID_TEMPERATURE
+          !std::isnan(temperature)
               ? voltage + TEMP_COEFFICIENT * (temperature - CALIBRATED_TEMP)
               : voltage;
       // Normalize the voltage between 0 and 1
@@ -84,7 +83,6 @@ const float compute_soil_vwc(const float voltage, const float temperature,
       result = 1.0974 * exp(-2.4215 * x_norm) - 0.0974;
       break;
     }
-  }
   }
   // Ensure the final result is between 0% and 100%
   result = MAX(0, MIN(1, result));
@@ -97,8 +95,8 @@ const float compute_soil_temperature(const float voltage,
   const float T_0 = 298.15;    // 25°C in Kelvin
   const float K_TO_C = 273.15; // Conversion from Kelvin to Celsius
   // Guard against division by zero
-  if (voltage <= 0 || voltage >= VCC) {
-    return INVALID_TEMPERATURE;
+  if (std::isnan(voltage) || voltage <= 0 || voltage >= VCC) {
+    return NAN;
   }
   switch (version) {
   case SoilProbeVersion::V3:
@@ -121,7 +119,7 @@ const float compute_soil_temperature(const float voltage,
     return temp_k - K_TO_C;
   }
   }
-  return INVALID_TEMPERATURE;
+  return NAN;
 }
 
 } // namespace sensasoil
