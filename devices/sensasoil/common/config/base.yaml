@@ -15,6 +15,11 @@ globals:
     type: bool
     restore_value: no
     initial_value: "false"
+  - id: last_exec_error
+    type: sensasoil::ErrorCode
+    restore_value: yes
+    update_interval: ${SAVE_TO_STORAGE_INTERNAL_INTERVAL}
+    initial_value: sensasoil::ErrorCode::NONE
 
 esphome:
   name: "sensasoil-v${HARDWARE_VERSION_FLAT}"
@@ -26,6 +31,8 @@ esphome:
     version: "${FIRMWARE_VERSION}"
   includes:
     - "<improv.h>"
+    - "../../common/cpp/sensasoil_common.h"
+    - "<sensasoil_common.h>"  # workaround to make the header available for every component
   libraries:
     - improv=https://github.com/rapsssito/extended-improv-sdk-cpp
   on_boot:
@@ -36,6 +43,10 @@ esphome:
             id(manual_reset) = id(manual_reset) || id(factory_clean);
             id(factory_clean) = false;
         - script.execute: main_script
+
+# Let each global decide when it should be saved
+preferences:
+  flash_write_interval: never
 
 mdns:
   disabled: true
@@ -83,6 +94,6 @@ script:
       - script.wait: serve_ble_server
       - lambda: |-
           ESP_LOGI("main_script", "Main script complete, entering deep sleep");
-          id(last_exec_error) = ${ERROR_NONE};
+          id(last_exec_error) = sensasoil::ErrorCode::NONE;
           id(mqtt_initial_connection_setup) = false;
           id(deep_sleep_wait_mqtt)->execute();

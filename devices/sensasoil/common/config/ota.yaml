@@ -42,7 +42,7 @@ ota:
           id(mqtt_initial_connection_setup) = true;
     on_error:
       - lambda: |-
-          id(last_exec_error) = ${ERROR_OTA};
+          id(last_exec_error) = sensasoil::ErrorCode::OTA;
           // OTA failed, we can assume the network is working since we were able to reach the server
           // so let the code proceed to set up MQTT and the rest of the system
           // We keep the check_ota count reset so the next check will be in CHECK_OTA_INTERVAL boots

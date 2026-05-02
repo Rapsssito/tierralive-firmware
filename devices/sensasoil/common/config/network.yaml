@@ -2,12 +2,6 @@ substitutions:
   MQTT_PREFIX: "ss"
   MQTT_DEFAULT_ADDRESS: "192.168.1.68"
   MQTT_DEFAULT_PORT: "1883"
-  # Internal error codes
-  ERROR_NONE: "0"
-  ERROR_WIFI: "1"
-  ERROR_MQTT: "2"
-  ERROR_MQTT_ACK_TIMEOUT: "3"
-  ERROR_OTA: "4"
   # Error timeouts
   DELAY_ERROR_WIFI_MS: "2 * 60 * 1000"
   DELAY_ERROR_MQTT_MS: "2 * 60 * 1000"
@@ -76,11 +70,6 @@ globals:
     type: bool
     restore_value: no
     initial_value: "false"
-  - id: last_exec_error
-    type: uint8_t
-    restore_value: yes
-    update_interval: ${SAVE_TO_STORAGE_INTERNAL_INTERVAL}
-    initial_value: ${ERROR_NONE}
   - id: received_update_id
     type: std::string
     restore_value: no
@@ -89,10 +78,6 @@ globals:
     type: std::string
     restore_value: no
     initial_value: '"${INITIAL_UPDATE_ID}"'
-  - id: mqtt_shutdown_complete
-    type: bool
-    restore_value: no
-    initial_value: "false"
 
 mqtt:
   id: mqtt_id
@@ -165,7 +150,7 @@ script:
     then:
       - lambda: |-
           // Skip disconnect script if configuring WiFi
-          if (id(device_setup_state) == ${SETUP_STATE_WIFI_CONFIG}) {
+          if (id(device_setup_state) == sensasoil::BleSetupState::WIFI_CONFIG) {
             id(on_wifi_disconnect)->stop();
             return;
           }
@@ -184,7 +169,7 @@ script:
             // Start error sleep timeout if the error comes after a sleep
             id(send_to_deep_sleep)->execute(${DELAY_ERROR_WIFI_MS}, ${SLEEP_ERROR_WIFI_MS});
           }
-          id(last_exec_error) = ${ERROR_WIFI};
+          id(last_exec_error) = sensasoil::ErrorCode::WIFI;
       # Wait for WiFi to be connected
       - wait_until:
           wifi.connected
@@ -200,7 +185,7 @@ script:
     then:
       - lambda: |-
           // Skip disconnect script if configuring MQTT or on_wifi_disconnect is running
-          if (id(device_setup_state) == ${SETUP_STATE_MQTT_CONFIG} || id(device_setup_state) == ${SETUP_STATE_WIFI_CONFIG} || id(on_wifi_disconnect)->is_running()) {
+          if (id(device_setup_state) == sensasoil::BleSetupState::MQTT_CONFIG || id(device_setup_state) == sensasoil::BleSetupState::WIFI_CONFIG || id(on_wifi_disconnect)->is_running()) {
             id(on_mqtt_disconnect)->stop();
             return;
           }
@@ -217,7 +202,7 @@ script:
             // Start error sleep timeout if the error comes after a sleep
             id(send_to_deep_sleep)->execute(${DELAY_ERROR_MQTT_MS}, ${SLEEP_ERROR_MQTT_MS});
           }
-          id(last_exec_error) = ${ERROR_MQTT};
+          id(last_exec_error) = sensasoil::ErrorCode::MQTT;
       # Wait for MQTT to be connected
       - wait_until:
           mqtt.connected
@@ -364,7 +349,7 @@ script:
               id(send_to_deep_sleep)->execute(0, id(deep_sleep_duration).state * 60 * 1000);
             } else {
               ESP_LOGE("deep_sleep_wait_mqtt", "MQTT timeout waiting for update ID to be received. current_update_id: %s, received_update_id: %s", id(current_update_id).c_str(), id(received_update_id).c_str());
-              id(last_exec_error) = ${ERROR_MQTT_ACK_TIMEOUT};
+              id(last_exec_error) = sensasoil::ErrorCode::MQTT_ACK_TIMEOUT;
               // If the message is not received in time, reset with a short deep sleep to avoid blocking the device if something is wrong with the MQTT connection
               id(send_to_deep_sleep)->execute(0, ${SLEEP_ERROR_MQTT_MS});
             }
