@@ -18,15 +18,13 @@ enum class BleSetupState : uint8_t {
  * for TierraLive devices
  */
 enum class ExtendedImprovCommand : uint8_t {
-  MQTT_CHANGE_SETTINGS = 1,     ///< Change MQTT broker settings
-  FACTORY_RESET = 2,            ///< Reset device to factory defaults
-  MQTT_VIEW_SETTINGS = 3,       ///< View current MQTT settings
-  WIFI_VIEW_SETTINGS = 4,       ///< View current WiFi settings
-  ENABLE_DIAGNOSTIC = 5,        ///< Enable diagnostic mode
-  MQTT_DISCOVERY_PREFIX = 6,    ///< Set MQTT discovery prefix
-  REFRESH_SENSORS = 7,          ///< Refresh sensor readings
-  CALIBRATE_SENSORS = 8,        ///< Calibrate soil moisture sensor
-  CALIBRATION_VIEW_SETTINGS = 9 ///< View current calibration settings
+  FACTORY_RESET = 1,      ///< Reset device to factory defaults
+  DIAGNOSTIC = 2,         ///< Read or write diagnostic settings
+  REFRESH_SENSORS = 3,    ///< Trigger refresh of all sensor readings
+  CALIBRATION = 4,        ///< Read or write calibration settings
+  WIFI_VIEW_SETTINGS = 5, ///< Read current WiFi settings
+  MQTT_SETTINGS = 6,      ///< Read or write MQTT settings
+  CELLULAR_SETTINGS = 7,  ///< Read or write cellular settings
 };
 
 /**
@@ -47,11 +45,11 @@ enum class SoilProbeVersion : uint8_t { V3, V4, V5 };
 
 /**
  * @brief Convert raw bytes to std::string with explicit length
- * 
+ *
  * This helper avoids repeated lambda definitions and provides portable
  * byte-to-string conversion without relying on std::string SSO behavior.
  * Safe for binary payloads including embedded null bytes.
- * 
+ *
  * @param bytes Pointer to byte buffer (cast as const uint8_t*)
  * @param length Number of bytes to include
  * @return std::string constructed from the byte range
