@@ -206,7 +206,13 @@ esp32_ble_server:
                             ESP_LOGD("ExtendedImprov", "MQTT settings received");
                             id(improv_state) = improv::State::STATE_PROVISIONING;
                             id(improv_status_characteristic)->notify();
-                            id(improv_mqtt_configure)->execute(std::string(command.data[1].begin(), command.data[1].end()), bytebuffer::ByteBuffer::wrap(command.data[2]).get_uint16(), std::string(command.data[3].begin(), command.data[3].end()), std::string(command.data[4].begin(), command.data[4].end()), command.data[5][0]);
+                            id(improv_mqtt_configure)->execute(
+                              sensasoil::make_string(command.data[1].data(), command.data[1].size()),
+                              bytebuffer::ByteBuffer::wrap(command.data[2]).get_uint16(),
+                              sensasoil::make_string(command.data[3].data(), command.data[3].size()),
+                              sensasoil::make_string(command.data[4].data(),command.data[4].size()),
+                              command.data[5][0]
+                            );
                             break;
                           case sensasoil::ExtendedImprovCommand::FACTORY_RESET:
                             ESP_LOGD("ExtendedImprov", "Factory reset received");
@@ -251,12 +257,9 @@ esp32_ble_server:
                             if (!ensure_expected_length(command.data, 5)) break;
                             // Receive: probe version (1 byte) + 3x4-byte floats in command.data[1-4]
                             uint8_t probe_version = command.data[1][0];
-                            bytebuffer::ByteBuffer temp_buf = bytebuffer::ByteBuffer::wrap(command.data[2]);
-                            float calibration_temp = temp_buf.get_float();
-                            bytebuffer::ByteBuffer max_buf = bytebuffer::ByteBuffer::wrap(command.data[3]);
-                            float max_voltage = max_buf.get_float();
-                            bytebuffer::ByteBuffer min_buf = bytebuffer::ByteBuffer::wrap(command.data[4]);
-                            float min_voltage = min_buf.get_float();
+                            float calibration_temp = bytebuffer::ByteBuffer::wrap(command.data[2]).get_float();
+                            float max_voltage = bytebuffer::ByteBuffer::wrap(command.data[3]).get_float();
+                            float min_voltage = bytebuffer::ByteBuffer::wrap(command.data[4]).get_float();
                             ESP_LOGD("Calibration", "Received calibration data: probe_version=%d, temp=%.2f, max_voltage=%.3f, min_voltage=%.3f", probe_version, calibration_temp, max_voltage, min_voltage);
                             // Update calibration parameters
                             id(soil_probe_version) = static_cast<sensasoil::SoilProbeVersion>(probe_version);
@@ -428,18 +431,21 @@ script:
   - id: improv_wifi_mqtt_show_config
     then:
       - lambda: |-
-          std::string mqtt_port_str(sizeof(uint16_t), 0);
-          mqtt_port_str[0] = static_cast<char>(id(mqtt_broker_port) & 0xFF);
-          mqtt_port_str[1] = static_cast<char>((id(mqtt_broker_port) >> 8) & 0xFF);
-          std::vector<std::string> response = {
-              { static_cast<uint8_t>(sensasoil::ExtendedImprovCommand::MQTT_VIEW_SETTINGS) },
-              id(mqtt_broker_address),
-              mqtt_port_str,
-              {id(mqtt_tls_flags)},
-              {id(mqtt_id)->is_connected()},
-              id(mqtt_username),
-              id(mqtt_discovery_prefix)
-          };
+          uint8_t response_command = static_cast<uint8_t>(sensasoil::ExtendedImprovCommand::MQTT_VIEW_SETTINGS);
+          bytebuffer::ByteBuffer payload = bytebuffer::ByteBuffer(2 + 1 + 1);
+          payload.put_uint16(id(mqtt_broker_port));
+          payload.put_uint8(id(mqtt_tls_flags));
+          payload.put_uint8(id(mqtt_id)->is_connected());
+          std::vector<uint8_t> data = payload.get_data();
+          std::vector<std::string> response;
+          response.reserve(7);
+          response.emplace_back(sensasoil::make_string(&response_command, 1));
+          response.emplace_back(id(mqtt_broker_address));
+          response.emplace_back(sensasoil::make_string(data.data() + 2, 2));
+          response.emplace_back(sensasoil::make_string(data.data() + 4, 1));
+          response.emplace_back(sensasoil::make_string(data.data() + 5, 1));
+          response.emplace_back(id(mqtt_username));
+          response.emplace_back(id(mqtt_discovery_prefix));
           id(improv_rpc_result)->set_value(improv::build_rpc_response(improv::CUSTOM, response, true));
           id(improv_rpc_result)->notify();
 
@@ -454,36 +460,34 @@ script:
           } else {
             std::strncpy(ip_buf, "", sizeof(ip_buf));
           }
-          std::vector<std::string> response = {
-              { static_cast<uint8_t>(sensasoil::ExtendedImprovCommand::WIFI_VIEW_SETTINGS) },
-              id(wifi_ssid),
-              ip_buf
-          };
+          uint8_t response_command = static_cast<uint8_t>(sensasoil::ExtendedImprovCommand::WIFI_VIEW_SETTINGS);
+          std::vector<std::string> response;
+          response.reserve(3);
+          response.emplace_back(sensasoil::make_string(&response_command, 1));
+          response.emplace_back(id(wifi_ssid));
+          response.emplace_back(ip_buf);
           id(improv_rpc_result)->set_value(improv::build_rpc_response(improv::CUSTOM, response, true));
           id(improv_rpc_result)->notify();
 
   - id: improv_calibration_show_config
     then:
       - lambda: |-
-          // Build calibration data response: 1 byte probe version + 3x4-byte floats          
-          bytebuffer::ByteBuffer temp_buf = bytebuffer::ByteBuffer(4);
-          temp_buf.put_float(id(soil_probe_calibration_temperature));
-          std::vector<uint8_t> cal_temp_buf = temp_buf.get_data();
+          // Build the payload in one contiguous buffer to avoid allocating multiple times
+          bytebuffer::ByteBuffer payload = bytebuffer::ByteBuffer(1 + 1 + 4 + 4 + 4);
+          payload.put_uint8(static_cast<uint8_t>(sensasoil::ExtendedImprovCommand::CALIBRATION_VIEW_SETTINGS));
+          payload.put_uint8(static_cast<uint8_t>(id(soil_probe_version)));
+          payload.put_float(id(soil_probe_calibration_temperature));
+          payload.put_float(id(soil_probe_calibration_max_voltage));
+          payload.put_float(id(soil_probe_calibration_min_voltage));
           
-          bytebuffer::ByteBuffer max_buf = bytebuffer::ByteBuffer(4);
-          max_buf.put_float(id(soil_probe_calibration_max_voltage));
-          std::vector<uint8_t> cal_max_buf = max_buf.get_data();
-          
-          bytebuffer::ByteBuffer min_buf = bytebuffer::ByteBuffer(4);
-          min_buf.put_float(id(soil_probe_calibration_min_voltage));
-          std::vector<uint8_t> cal_min_buf = min_buf.get_data();
-          
-          std::vector<std::string> response = {
-              { static_cast<uint8_t>(sensasoil::ExtendedImprovCommand::CALIBRATION_VIEW_SETTINGS) },
-              { static_cast<uint8_t>(id(soil_probe_version)) },
-              std::string(cal_temp_buf.begin(), cal_temp_buf.end()),
-              std::string(cal_max_buf.begin(), cal_max_buf.end()),
-              std::string(cal_min_buf.begin(), cal_min_buf.end())
-          };
+          // Slice the buffer into separate strings for each field
+          std::vector<uint8_t> data = payload.get_data();
+          std::vector<std::string> response;
+          response.reserve(5);
+          response.emplace_back(sensasoil::make_string(data.data(), 1));
+          response.emplace_back(sensasoil::make_string(data.data() + 1, 1));
+          response.emplace_back(sensasoil::make_string(data.data() + 2, 4));
+          response.emplace_back(sensasoil::make_string(data.data() + 6, 4));
+          response.emplace_back(sensasoil::make_string(data.data() + 10, 4));
           id(improv_rpc_result)->set_value(improv::build_rpc_response(improv::CUSTOM, response, true));
           id(improv_rpc_result)->notify();

@@ -46,6 +46,21 @@ enum class ErrorCode : uint8_t {
 enum class SoilProbeVersion : uint8_t { V3, V4, V5 };
 
 /**
+ * @brief Convert raw bytes to std::string with explicit length
+ * 
+ * This helper avoids repeated lambda definitions and provides portable
+ * byte-to-string conversion without relying on std::string SSO behavior.
+ * Safe for binary payloads including embedded null bytes.
+ * 
+ * @param bytes Pointer to byte buffer (cast as const uint8_t*)
+ * @param length Number of bytes to include
+ * @return std::string constructed from the byte range
+ */
+inline std::string make_string(const uint8_t *bytes, size_t length) {
+  return std::string(reinterpret_cast<const char *>(bytes), length);
+}
+
+/**
  * @brief Compute soil volumetric water content (VWC) based on sensor readings
  * @param voltage Current raw voltage reading from the soil sensor
  * @param temperature Current temperature reading
