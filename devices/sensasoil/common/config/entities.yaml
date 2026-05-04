@@ -125,6 +125,7 @@ sensor:
     name: "Battery voltage"
     device_class: VOLTAGE
     unit_of_measurement: "V"
+    accuracy_decimals: 3
     entity_category: "diagnostic"
     state_class: measurement
     lambda: !lambda 'return id(battery_voltage_internal).state;'
@@ -135,6 +136,7 @@ sensor:
     name: "Battery level"
     device_class: BATTERY
     unit_of_measurement: "%"
+    accuracy_decimals: 2
     state_class: measurement
     lambda: !lambda 'return id(battery_level_internal).state;'
     state_topic: !lambda return id(mqtt_id).get_topic_prefix() + "/b_l";
@@ -162,6 +164,7 @@ sensor:
   - platform: template
     id: soil_temperature_v
     name: "Soil temperature voltage"
+    device_class: VOLTAGE
     unit_of_measurement: "V"
     accuracy_decimals: 3
     entity_category: "diagnostic"
@@ -173,6 +176,7 @@ sensor:
     id: soil_volumetric_water_v
     name: "Soil volumetric water voltage"
     unit_of_measurement: "V"
+    device_class: VOLTAGE
     accuracy_decimals: 3
     entity_category: "diagnostic"
     state_class: measurement
