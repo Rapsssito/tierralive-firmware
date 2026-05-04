@@ -22,95 +22,53 @@ sensor:
     id: temperature_humidity_sensor
     update_interval: never
     temperature:
-      name: "Ambient temperature"
-      id: ambient_temperature
-      accuracy_decimals: 1
-      state_class: measurement
-      device_class: TEMPERATURE
-      state_topic: !lambda return id(mqtt_id).get_topic_prefix() + "/a_t";
-      qos: 1
-      subscribe_qos: 1
+      id: ambient_temperature_internal
+      internal: true
     humidity:
-      name: "Ambient humidity"
-      id: ambient_humidity
-      accuracy_decimals: 1
-      device_class: HUMIDITY
-      state_class: measurement
-      state_topic: !lambda return id(mqtt_id).get_topic_prefix() + "/a_h";
-      qos: 1
-      subscribe_qos: 1
+      id: ambient_humidity_internal
+      internal: true
   - platform: adc
-    id: battery_v
+    id: battery_voltage_internal
     pin: GPIO3
-    name: "Battery voltage"
     attenuation: 12db
-    unit_of_measurement: "V"
-    entity_category: "diagnostic"
-    accuracy_decimals: 2
     samples: 64
     filters:
     - calibrate_linear:
           - 1.91 -> 3.3
           - 2.40 -> 4.2
-    state_class: measurement
-    state_topic: !lambda 'return id(diagnostic_mode) ? id(mqtt_id).get_topic_prefix() + "/b_v" : "";'
-    <<: *public_sensor
+    update_interval: never
+    internal: true
   - platform: template
-    id: battery_level
-    name: "Battery level"
-    unit_of_measurement: "%"
-    accuracy_decimals: 0
-    state_class: measurement
-    device_class: BATTERY
-    icon: mdi:battery
-    lambda: ! return id(battery_v).state;
-    filters:
-    - calibrate_linear:
-        - 3.3 -> 0.00
-        - 4.2 -> 100.00
-    - clamp:
-        min_value: 0
-        max_value: 100
-    on_value:
-      then:
-        - if:
-            condition:
-              - ble.enabled
-            then:
-              - ble_server.characteristic.notify:
-                  id: ble_battery_level_char
-              - ble_server.characteristic.notify:
-                  id: ble_battery_status_char
-    state_topic: !lambda return id(mqtt_id).get_topic_prefix() + "/b_l";
-    <<: *public_sensor
+    id: battery_level_internal
+    lambda: !lambda |-
+      const float battery = id(battery_voltage_internal).state;
+      if (battery <= 3.3f) {
+        return 0.0f;
+      }
+      if (battery >= 4.2f) {
+        return 100.0f;
+      }
+      return (battery - 3.3f) * (100.0f / (4.2f - 3.3f));
+    update_interval: never
+    internal: true
   - platform: adc
-    id: soil_temperature_v
-    name: "Soil temperature voltage"
+    id: soil_temperature_v_internal
     attenuation: 12db
-    accuracy_decimals: 3
-    unit_of_measurement: "V"
-    entity_category: "diagnostic"
     samples: 64
-    state_class: measurement
-    state_topic: !lambda 'return id(diagnostic_mode) ? id(mqtt_id).get_topic_prefix() + "/s_tv" : "";'
-    <<: *public_sensor
     pin: GPIO1
+    update_interval: never
+    internal: true
   - platform: adc
-    id: soil_volumetric_water_v
-    name: "Soil volumetric water voltage"
+    id: soil_volumetric_water_v_internal
     attenuation: 12db
-    unit_of_measurement: "V"
-    accuracy_decimals: 3
-    entity_category: "diagnostic"
     samples: 64
-    state_class: measurement
-    state_topic: !lambda 'return id(diagnostic_mode) ? id(mqtt_id).get_topic_prefix() + "/s_wv" : "";'
-    <<: *public_sensor
     pin: GPIO4
+    update_interval: never
+    internal: true
 
 binary_sensor:
   - platform: gpio
-    id: is_charging_internal
+    id: is_battery_charging_internal
     trigger_on_initial_state: true
     use_interrupt: true
     pin:
@@ -138,15 +96,6 @@ binary_sensor:
     on_press:
       then:
         - button.press: factory_reset_button
-  - platform: template
-    id: is_battery_charging
-    trigger_on_initial_state: true
-    name: "Charging"
-    device_class: BATTERY_CHARGING
-    icon: mdi:battery-charging
-    qos: 1
-    subscribe_qos: 1
-    state_topic: !lambda return id(mqtt_id).get_topic_prefix() + "/b_c";
 
 output:
   - platform: ledc
@@ -166,31 +115,18 @@ switch:
         - lambda: ! id(power_sensors_time) = millis();
 
 script:
-  - id: refresh_sensors_script
+  - id: publish_sensors_specific
     mode: restart
     then:
-      # Publish state for firmware and hardware versions (automatically published only once handled by sensor)
-      - text_sensor.template.publish:
-          id: firmware_version
-          state: "${FIRMWARE_VERSION}"
-      - text_sensor.template.publish:
-          id: hardware_version
-          state: "${HARDWARE_VERSION}"
-      - delay: 1ms # yield
-      # Publish state of non-peripherals
-      - component.update: error_state
-      - binary_sensor.template.publish:
-          id: is_battery_charging
-          state: !lambda return id(is_charging_internal).state;
-      - delay: 1ms # yield
-      - component.update: chip_temperature
-      - component.update: wifi_signal_db
-      - component.update: network_signal
-      - delay: 1ms # yield
-      - component.update: battery_v
-      - component.update: battery_level
-      # Update time to sleep based on battery level
-      - component.update: deep_sleep_duration
+      # Nothing to publish
+      - delay: 1ms
+
+  - id: read_sensors_specific
+    mode: restart
+    then:
+      # Battery charging is automatically updated by the GPIO
+      - component.update: battery_voltage_internal
+      - component.update: battery_level_internal
       # Update peripherals voltage sensors
       # Turn on peripheral power if not already
       - lambda: |-
@@ -218,17 +154,3 @@ script:
       - delay: 1ms # yield
       # Turn off peripheral power
       - switch.turn_off: power_sensors
-      # Update template sensors based on the voltage
-      - component.update: soil_temperature
-      - component.update: soil_volumetric_water
-      - delay: 1ms # yield
-      # Update BLE info characteristic with the new sensor readings
-      - if:
-          condition:
-            - ble.enabled
-          then:
-            - ble_server.characteristic.notify:
-                id: ble_battery_status_char
-            - ble_server.characteristic.notify:
-                id: ble_sensasoil_info_char
-

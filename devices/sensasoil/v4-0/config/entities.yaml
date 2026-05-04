@@ -29,24 +29,11 @@ sensor:
     address: 0x36
     update_interval: never
     battery_voltage:
-      name: "Battery voltage"
-      id: battery_voltage
-      device_class: VOLTAGE
-      unit_of_measurement: "V"
-      entity_category: "diagnostic"
-      state_class: measurement
-      state_topic: !lambda 'return id(diagnostic_mode) ? id(mqtt_id).get_topic_prefix() + "/b_v" : "";'
-      qos: 1
-      subscribe_qos: 1
+      id: battery_voltage_internal
+      internal: true
     battery_level:
-      name: "Battery level"
-      id: battery_level
-      state_class: measurement
-      device_class: BATTERY
-      icon: mdi:battery
-      state_topic: !lambda return id(mqtt_id).get_topic_prefix() + "/b_l";
-      qos: 1
-      subscribe_qos: 1
+      id: battery_level_internal
+      internal: true
       filters:
         # Make sure it stays between 0 and 100 since max17048 can be a bit optimistic
         - clamp:
@@ -58,47 +45,25 @@ sensor:
     power_mode: ULTRA_LOW_POWER
     update_interval: never
     temperature:
-      name: "Ambient temperature"
-      id: ambient_temperature
-      accuracy_decimals: 1
-      state_class: measurement
-      device_class: TEMPERATURE
-      state_topic: !lambda return id(mqtt_id).get_topic_prefix() + "/a_t";
-      qos: 1
-      subscribe_qos: 1
+      id: ambient_temperature_internal
+      internal: true
     humidity:
-      name: "Ambient humidity"
-      id: ambient_humidity
-      accuracy_decimals: 1
-      device_class: HUMIDITY
-      state_class: measurement
-      state_topic: !lambda return id(mqtt_id).get_topic_prefix() + "/a_h";
-      qos: 1
-      subscribe_qos: 1
+      id: ambient_humidity_internal
+      internal: true
   - platform: adc
-    id: soil_temperature_v
-    name: "Soil temperature voltage"
-    attenuation: 12db
-    accuracy_decimals: 3
-    unit_of_measurement: "V"
-    entity_category: "diagnostic"
-    samples: 64
-    state_class: measurement
-    state_topic: !lambda 'return id(diagnostic_mode) ? id(mqtt_id).get_topic_prefix() + "/s_tv" : "";'
-    <<: *public_sensor
+    id: soil_temperature_v_internal
     pin: GPIO4
-  - platform: adc
-    id: soil_volumetric_water_v
-    name: "Soil volumetric water voltage"
     attenuation: 12db
-    unit_of_measurement: "V"
-    accuracy_decimals: 3
-    entity_category: "diagnostic"
     samples: 64
-    state_class: measurement
-    state_topic: !lambda 'return id(diagnostic_mode) ? id(mqtt_id).get_topic_prefix() + "/s_wv" : "";'
-    <<: *public_sensor
+    internal: true
+    update_interval: never
+  - platform: adc
+    id: soil_volumetric_water_v_internal
     pin: GPIO5
+    attenuation: 12db
+    samples: 64
+    internal: true
+    update_interval: never
 
 binary_sensor:
   - platform: bq25186
@@ -117,14 +82,9 @@ binary_sensor:
                 id(pg_gpo_switch)->turn_on();
               }
     charging:
-      id: is_battery_charging
-      name: "Charging"
-      device_class: BATTERY_CHARGING
-      icon: mdi:battery-charging
+      id: is_battery_charging_internal
+      internal: true
       trigger_on_initial_state: true
-      qos: 1
-      subscribe_qos: 1
-      state_topic: !lambda return id(mqtt_id).get_topic_prefix() + "/b_c";
   - platform: gpio
     id: factory_reset_internal_button
     use_interrupt: True
@@ -169,70 +129,40 @@ switch:
         - lambda: ! id(power_sensors_time) = millis();
 
 script:
-  - id: refresh_sensors_script
+  - id: publish_sensors_specific
+    mode: restart
+    then:
+      # Nothing to publish
+      - delay: 1ms
+
+  - id: read_sensors_specific
     mode: restart
     then:
       # Update battery sensor first, since some actions depend on its state
       # and also prevents other stuff from affecting the battery reading (like powering sensors)
       - component.update: battery_sensor
-      - delay: 1ms # yield
-      - component.update: bq25186_charger
-      - delay: 1ms # yield
-      # Update time to sleep based on battery level
-      - component.update: deep_sleep_duration
-      - delay: 1ms # yield
-      # Publish state for firmware and hardware versions (automatically published only once handled by sensor)
-      - text_sensor.template.publish:
-          id: firmware_version
-          state: "${FIRMWARE_VERSION}"
-      - delay: 1ms # yield
-      - text_sensor.template.publish:
-          id: hardware_version
-          state: "${HARDWARE_VERSION}"
-      - delay: 1ms # yield
-      # Publish state of diagnistics
-      - component.update: error_state
-      - delay: 1ms # yield
-      - component.update: chip_temperature
-      - delay: 1ms # yield
-      - component.update: wifi_signal_db
-      - delay: 1ms # yield
-      - component.update: network_signal
-      - delay: 1ms # yield
-      - component.update: temperature_humidity_sensor
       # Turn on peripheral power if not already
       - lambda: |-
           // The if is important to prevent resetting the power_sensors_time
           if (!id(power_sensors).state) {
             id(power_sensors)->turn_on();
           }
+      - delay: 1ms # yield
+      # Read some sensors to give some time for the peripherals to stabilize after powering them on
+      - component.update: bq25186_charger
+      - component.update: temperature_humidity_sensor
+      # Publish state of diagnistics
       # Wait (hardware dependent delay)
       - delay: !lambda |-
           const unsigned long elapsed = millis() - id(power_sensors_time);
           return elapsed < 50 ? 50 - elapsed : 0;
-      - component.update: soil_volumetric_water_v
+      - component.update: soil_volumetric_water_v_internal
       - delay: 1ms # yield
       # Wait (hardware dependent delay)
       - delay: !lambda |-
           const unsigned long elapsed = millis() - id(power_sensors_time);
           return elapsed < 100 ? 100 - elapsed : 0;
       # Update peripherals voltage sensors
-      - component.update: soil_temperature_v
-      - delay: 1ms # yield
+      - component.update: soil_temperature_v_internal
       # Turn off peripheral power
       - switch.turn_off: power_sensors
-      - delay: 1ms # yield
-      # Update template sensors based on the voltage
-      - component.update: soil_temperature
-      - delay: 1ms # yield
-      - component.update: soil_volumetric_water
-      - delay: 1ms # yield
-      # Update BLE info characteristic with the new sensor readings
-      - if:
-          condition:
-            - ble.enabled
-          then:
-            - ble_server.characteristic.notify:
-                id: ble_battery_status_char
-            - ble_server.characteristic.notify:
-                id: ble_sensasoil_info_char

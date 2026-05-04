@@ -48,7 +48,7 @@ esp32_ble_server:
   on_connect:
     - lambda: |-
         // Refresh sensors on BLE connection to have updated values
-        id(refresh_sensors_script)->execute();
+        id(improv_read_sensors)->execute();
         id(last_ble_communication_timestamp) = millis();
   services:
     - uuid: 0x180F
@@ -59,7 +59,7 @@ esp32_ble_server:
           read: true
           notify: true
           value: !lambda |-
-            return { static_cast<uint8_t>(std::round(id(battery_level).state)) };
+            return { static_cast<uint8_t>(std::round(id(battery_level_internal).state)) };
         - uuid: 0x2BED
           id: ble_battery_status_char
           read: true
@@ -79,7 +79,7 @@ esp32_ble_server:
             power_state |= (0b10 << 3);
             // Set to 10 (unknown) as we do not know if it is solar charging
             // Battery charge state (bits 5-6)
-            if (id(is_battery_charging).state) {
+            if (id(is_battery_charging_internal).state) {
               // Charging
               power_state |= (0b01 << 5);
             } else {
@@ -87,7 +87,7 @@ esp32_ble_server:
               power_state |= (0b10 << 5);
             }
             // Battery charge level (bits 7-8)
-            float bat_level = id(battery_level).state;
+            float bat_level = id(battery_level_internal).state;
             if (bat_level <= 5.0) {
               // Critical
               power_state |= (0b11 << 7);
@@ -124,15 +124,15 @@ esp32_ble_server:
             // Build payload: 5x4-byte floats = 20 bytes total
             bytebuffer::ByteBuffer buf = bytebuffer::ByteBuffer(20);
             // Ambient temperature
-            buf.put_float(id(ambient_temperature).state);
+            buf.put_float(id(ambient_temperature_internal).state);
             // Ambient humidity
-            buf.put_float(id(ambient_humidity).state);
+            buf.put_float(id(ambient_humidity_internal).state);
             // Soil temperature
-            buf.put_float(id(soil_temperature).state);
+            buf.put_float(id(soil_temperature_internal).state);
             // Soil volumetric water (percentage)
-            buf.put_float(id(soil_volumetric_water).state);
+            buf.put_float(id(soil_volumetric_water_internal).state);
             // Soil volumetric water voltage
-            buf.put_float(id(soil_volumetric_water_v).state);
+            buf.put_float(id(soil_volumetric_water_v_internal).state);
             return buf.get_data();
     - uuid: ${IMPROV_SERVICE_UUID}
       advertise: true
@@ -231,15 +231,7 @@ esp32_ble_server:
                             break;
                           case sensasoil::ExtendedImprovCommand::DIAGNOSTIC: {
                             if (command.data.size() == 1) {
-                              ESP_LOGD("ExtendedImprov", "Request of diagnostic settings received");
-                              uint8_t response_command = static_cast<uint8_t>(sensasoil::ExtendedImprovCommand::DIAGNOSTIC);
-                              std::vector<std::string> response;
-                              response.reserve(2);
-                              response.emplace_back(sensasoil::make_string(&response_command, 1));
-                              uint8_t diagnostic_enabled = id(diagnostic_mode) ? 1 : 0;
-                              response.emplace_back(sensasoil::make_string(&diagnostic_enabled, 1));
-                              id(improv_rpc_result)->set_value(improv::build_rpc_response(improv::CUSTOM, response, true));
-                              id(improv_rpc_result)->notify();
+                              id(improv_diagnostic_show_config)->execute();
                               break;
                             }
                             ESP_LOGD("ExtendedImprov", "Diagnostic command received");
@@ -256,7 +248,7 @@ esp32_ble_server:
                           }
                           case sensasoil::ExtendedImprovCommand::REFRESH_SENSORS:
                             ESP_LOGD("ExtendedImprov", "Refresh sensors command received");
-                            id(refresh_sensors_script)->execute();
+                            id(improv_read_sensors)->execute();
                             break;
                           case sensasoil::ExtendedImprovCommand::CALIBRATION: {
                             if (command.data.size() == 1) {
@@ -500,3 +492,26 @@ script:
           response.emplace_back(sensasoil::make_string(data.data() + 10, 4));
           id(improv_rpc_result)->set_value(improv::build_rpc_response(improv::CUSTOM, response, true));
           id(improv_rpc_result)->notify();
+
+  - id: improv_diagnostic_show_config
+    then:
+      - lambda: |-
+          ESP_LOGD("ExtendedImprov", "Request of diagnostic settings received");
+          uint8_t response_command = static_cast<uint8_t>(sensasoil::ExtendedImprovCommand::DIAGNOSTIC);
+          std::vector<std::string> response;
+          response.reserve(2);
+          response.emplace_back(sensasoil::make_string(&response_command, 1));
+          uint8_t diagnostic_enabled = id(diagnostic_mode) ? 1 : 0;
+          response.emplace_back(sensasoil::make_string(&diagnostic_enabled, 1));
+          id(improv_rpc_result)->set_value(improv::build_rpc_response(improv::CUSTOM, response, true));
+          id(improv_rpc_result)->notify();
+
+  - id: improv_read_sensors
+    then:
+      - script.execute: read_sensors
+      - script.wait: read_sensors
+      # Update BLE info characteristic with the new sensor readings
+      - ble_server.characteristic.notify:
+          id: ble_battery_status_char
+      - ble_server.characteristic.notify:
+          id: ble_sensasoil_info_char

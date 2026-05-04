@@ -46,44 +46,23 @@ globals:
     update_interval: ${SAVE_TO_STORAGE_INTERNAL_INTERVAL}
 
 sensor:
-  - platform: template
-    id: network_signal
-    name: "Network signal"
-    accuracy_decimals: 0
-    unit_of_measurement: "dBm"
-    state_class: measurement
-    entity_category: "diagnostic"
-    device_class: SIGNAL_STRENGTH
-    state_topic: !lambda 'return id(diagnostic_mode) ? id(mqtt_id).get_topic_prefix() + "/n_s" : "";'
-    lambda: |-
-        return id(wifi_signal_db).state;
-    <<: *public_sensor
   - platform: wifi_signal
     name: "WiFi signal"
-    id: wifi_signal_db
-    accuracy_decimals: 0
+    id: wifi_signal_db_internal
     update_interval: never
     internal: true
   - platform: internal_temperature
-    id: chip_temperature
-    name: "Chip temperature"
-    accuracy_decimals: 1
-    device_class: TEMPERATURE
-    state_class: measurement
-    entity_category: "diagnostic"
-    state_topic: !lambda 'return id(diagnostic_mode) ? id(mqtt_id).get_topic_prefix() + "/c_t" : "";'
-    <<: *public_sensor
+    id: chip_temperature_internal
+    internal: true
+    update_interval: never
   - platform: template
-    id: deep_sleep_duration
-    name: "Deep sleep duration"
-    entity_category: "diagnostic"  # diagnostic for HA, but always published for external monitoring
-    icon: mdi:clock-outline
-    state_class: measurement
-    unit_of_measurement: minutes
+    id: deep_sleep_duration_internal
+    internal: true
+    update_interval: never
     lambda: |-
         const float max_sleep_minutes = ${SENSASOIL_SLEEP_MAX_MINUTES};
         const float min_sleep_minutes = ${SENSASOIL_SLEEP_MIN_MINUTES};
-        float battery = id(battery_level).state;
+        float battery = id(battery_level_internal).state;
         if (isnan(battery)) {
           return max_sleep_minutes;
         }
@@ -95,8 +74,111 @@ sensor:
         }
 
         return max_sleep_minutes - ((max_sleep_minutes - min_sleep_minutes) * (battery / 100.0f));
+  - platform: template
+    id: soil_temperature_internal
+    internal: true
+    update_interval: never
+    lambda: |-
+      return sensasoil::compute_soil_temperature(id(soil_temperature_v_internal).state, id(soil_probe_version));
+  - platform: template
+    id: soil_volumetric_water_internal
+    internal: true
+    update_interval: never
+    lambda: |-
+      return sensasoil::compute_soil_vwc(id(soil_volumetric_water_v_internal).state, id(soil_temperature_internal).state, id(soil_probe_calibration_temperature), id(soil_probe_calibration_min_voltage), id(soil_probe_calibration_max_voltage), id(soil_probe_version));
+  # PUBLIC SENSORS #
+  - platform: template
+    id: chip_temperature
+    name: "Chip temperature"
+    unit_of_measurement: "°C"
+    accuracy_decimals: 1
+    device_class: TEMPERATURE
+    state_class: measurement
+    entity_category: "diagnostic"
+    lambda: !lambda 'return id(chip_temperature_internal).state;'
+    state_topic: !lambda 'return id(diagnostic_mode) ? id(mqtt_id).get_topic_prefix() + "/c_t" : "";'
+    <<: *public_sensor
+  - platform: template
+    id: network_signal
+    name: "Network signal"
+    accuracy_decimals: 0
+    unit_of_measurement: "dBm"
+    state_class: measurement
+    entity_category: "diagnostic"
+    device_class: SIGNAL_STRENGTH
+    state_topic: !lambda 'return id(diagnostic_mode) ? id(mqtt_id).get_topic_prefix() + "/n_s" : "";'
+    lambda: |-
+        return id(wifi_signal_db_internal).state;
+    <<: *public_sensor
+  - platform: template
+    id: deep_sleep_duration
+    name: "Deep sleep duration"
+    entity_category: "diagnostic"  # diagnostic for HA, but always published for external monitoring
+    icon: mdi:clock-outline
+    state_class: measurement
+    unit_of_measurement: minutes
+    lambda: !lambda 'return id(deep_sleep_duration_internal).state;'
     <<: *public_sensor
     state_topic: !lambda 'return id(mqtt_id).get_topic_prefix() + "/s_d";'
+  - platform: template
+    id: battery_voltage
+    name: "Battery voltage"
+    device_class: VOLTAGE
+    unit_of_measurement: "V"
+    entity_category: "diagnostic"
+    state_class: measurement
+    lambda: !lambda 'return id(battery_voltage_internal).state;'
+    state_topic: !lambda 'return id(diagnostic_mode) ? id(mqtt_id).get_topic_prefix() + "/b_v" : "";'
+    <<: *public_sensor
+  - platform: template
+    id: battery_level
+    name: "Battery level"
+    device_class: BATTERY
+    unit_of_measurement: "%"
+    state_class: measurement
+    lambda: !lambda 'return id(battery_level_internal).state;'
+    state_topic: !lambda return id(mqtt_id).get_topic_prefix() + "/b_l";
+    <<: *public_sensor
+  - platform: template
+    id: ambient_temperature
+    name: "Ambient temperature"
+    accuracy_decimals: 1
+    unit_of_measurement: "°C"
+    device_class: TEMPERATURE
+    state_class: measurement
+    lambda: !lambda 'return id(ambient_temperature_internal).state;'
+    state_topic: !lambda return id(mqtt_id).get_topic_prefix() + "/a_t";
+    <<: *public_sensor
+  - platform: template
+    id: ambient_humidity
+    name: "Ambient humidity"
+    accuracy_decimals: 1
+    unit_of_measurement: "%"
+    device_class: HUMIDITY
+    state_class: measurement
+    lambda: !lambda 'return id(ambient_humidity_internal).state;'
+    state_topic: !lambda return id(mqtt_id).get_topic_prefix() + "/a_h";
+    <<: *public_sensor
+  - platform: template
+    id: soil_temperature_v
+    name: "Soil temperature voltage"
+    unit_of_measurement: "V"
+    accuracy_decimals: 3
+    entity_category: "diagnostic"
+    state_class: measurement
+    lambda: !lambda 'return id(soil_temperature_v_internal).state;'
+    state_topic: !lambda 'return id(diagnostic_mode) ? id(mqtt_id).get_topic_prefix() + "/s_tv" : "";'
+    <<: *public_sensor
+  - platform: template
+    id: soil_volumetric_water_v
+    name: "Soil volumetric water voltage"
+    unit_of_measurement: "V"
+    accuracy_decimals: 3
+    entity_category: "diagnostic"
+    state_class: measurement
+    lambda: !lambda 'return id(soil_volumetric_water_v_internal).state;'
+    state_topic: !lambda 'return id(diagnostic_mode) ? id(mqtt_id).get_topic_prefix() + "/s_wv" : "";'
+    <<: *public_sensor
   - platform: template
     id: soil_temperature
     name: "Soil temperature"
@@ -105,9 +187,7 @@ sensor:
     accuracy_decimals: 1
     device_class: TEMPERATURE
     state_class: measurement
-    lambda: |-
-      return sensasoil::compute_soil_temperature(id(soil_temperature_v).state, id(soil_probe_version));
-    state_topic: !lambda return id(mqtt_id).get_topic_prefix() + "/s_t";
+    lambda: !lambda 'return id(soil_temperature_internal).state;'
     <<: *public_sensor
   - platform: template
     id: soil_volumetric_water
@@ -116,11 +196,22 @@ sensor:
     unit_of_measurement: "%"
     device_class: MOISTURE
     state_class: measurement
-    <<: *public_sensor
     state_topic: !lambda return id(mqtt_id).get_topic_prefix() + "/s_w";
     accuracy_decimals: 1
-    lambda: |-
-      return sensasoil::compute_soil_vwc(id(soil_volumetric_water_v).state, id(soil_temperature).state, id(soil_probe_calibration_temperature), id(soil_probe_calibration_min_voltage), id(soil_probe_calibration_max_voltage), id(soil_probe_version));
+    lambda: !lambda 'return id(soil_volumetric_water_internal).state;'
+    <<: *public_sensor
+
+binary_sensor:
+  # PUBLIC SENSORS #
+  - platform: template
+    id: is_battery_charging
+    name: "Battery charging"
+    trigger_on_initial_state: true
+    device_class: BATTERY_CHARGING
+    icon: mdi:battery-charging
+    state_topic: !lambda return id(mqtt_id).get_topic_prefix() + "/b_c";
+    qos: 1
+    subscribe_qos: 1
 
 text_sensor:
   - platform: template
@@ -217,3 +308,64 @@ button:
   - platform: restart
     id: restart_button
     internal: True
+
+script:
+  - id: publish_sensors
+    mode: restart
+    then:
+    # Need to yield as the MQTT publish blocks the thread and can cause a watchdog reset if we publish too much at once without yielding
+    # Sensors
+    - binary_sensor.template.publish:
+        id: is_battery_charging
+        state: !lambda return id(is_battery_charging_internal).state;
+    - delay: 1ms # yield
+    - component.update: battery_level
+    - delay: 1ms # yield
+    - component.update: deep_sleep_duration
+    - delay: 1ms # yield
+    - component.update: ambient_temperature
+    - delay: 1ms # yield
+    - component.update: ambient_humidity
+    - delay: 1ms # yield
+    - component.update: soil_temperature
+    - delay: 1ms # yield
+    - component.update: soil_volumetric_water
+    - delay: 1ms # yield
+    # Diagnostics
+    # Publish state for firmware and hardware versions (automatically published only once handled by sensor)
+    - text_sensor.template.publish:
+        id: firmware_version
+        state: "${FIRMWARE_VERSION}"
+    - delay: 1ms # yield
+    - text_sensor.template.publish:
+        id: hardware_version
+        state: "${HARDWARE_VERSION}"
+    - delay: 1ms # yield
+    - component.update: error_state
+    - delay: 1ms # yield
+    - component.update: chip_temperature
+    - delay: 1ms # yield
+    - component.update: network_signal
+    - delay: 1ms # yield
+    - component.update: soil_temperature_v
+    - delay: 1ms # yield
+    - component.update: soil_volumetric_water_v
+    - delay: 1ms # yield
+    - component.update: battery_voltage
+    - delay: 1ms # yield
+    - script.execute: publish_sensors_specific
+    - script.wait: publish_sensors_specific
+  
+  - id: read_sensors
+    mode: restart
+    then:
+      # Read specific sensors
+      - script.execute: read_sensors_specific
+      - script.wait: read_sensors_specific
+      # Update template sensors based on the voltage
+      - component.update: soil_temperature_internal
+      - component.update: soil_volumetric_water_internal
+      # Rest of internal sensors
+      - component.update: deep_sleep_duration_internal
+      - component.update: wifi_signal_db_internal
+      - component.update: chip_temperature_internal

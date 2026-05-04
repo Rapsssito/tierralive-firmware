@@ -55,6 +55,9 @@ script:
   - id: main_script
     mode: restart
     then:
+      # Read sensors (to avoid interference with other peripherals: BLE, Wi-Fi, etc.)
+      - script.execute: read_sensors
+      - script.wait: read_sensors
       # Start BLE server if waked up by power on
       - lambda: |-
           if (id(manual_reset)) {
@@ -85,9 +88,9 @@ script:
       # Check if we need to do the initial connection setup (only if the data is not persisted)
       - script.execute: perform_initial_connection
       - script.wait: perform_initial_connection
-      # Sensors
-      - script.execute: refresh_sensors_script
-      - script.wait: refresh_sensors_script
+      # Publish sensor states
+      - script.execute: publish_sensors
+      - script.wait: publish_sensors
       # Mark boot successful to prevent safe mode from false-triggering on next boot after a successful setup
       - safe_mode.mark_successful
       # Wait in case the BLE server is still running
