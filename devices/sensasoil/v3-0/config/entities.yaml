@@ -137,7 +137,7 @@ script:
       # Wait (hardware dependent delay)
       - delay: !lambda |-
           const unsigned long elapsed = millis() - id(power_sensors_time);
-          return elapsed < 50 ? 50 - elapsed : 0;
+          return elapsed < 80 ? 80 - elapsed : 0;
       - component.update: soil_volumetric_water_v
       - delay: 1ms # yield
       # Wait (hardware dependent delay)
