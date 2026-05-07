@@ -107,8 +107,7 @@ sensor:
     entity_category: "diagnostic"
     device_class: SIGNAL_STRENGTH
     state_topic: !lambda 'return id(diagnostic_mode) ? id(mqtt_id).get_topic_prefix() + "/n_s" : "";'
-    lambda: |-
-        return id(wifi_signal_db_internal).state;
+    lambda: !lambda 'return id(wifi_signal_db_internal).state;'
     <<: *public_sensor
   - platform: template
     id: deep_sleep_duration
@@ -118,8 +117,8 @@ sensor:
     state_class: measurement
     unit_of_measurement: minutes
     lambda: !lambda 'return id(deep_sleep_duration_internal).state;'
-    <<: *public_sensor
     state_topic: !lambda 'return id(mqtt_id).get_topic_prefix() + "/s_d";'
+    <<: *public_sensor
   - platform: template
     id: battery_voltage
     name: "Battery voltage"
@@ -139,7 +138,7 @@ sensor:
     accuracy_decimals: 2
     state_class: measurement
     lambda: !lambda 'return id(battery_level_internal).state;'
-    state_topic: !lambda return id(mqtt_id).get_topic_prefix() + "/b_l";
+    state_topic: !lambda 'return id(mqtt_id).get_topic_prefix() + "/b_l";'
     <<: *public_sensor
   - platform: template
     id: ambient_temperature
@@ -149,7 +148,7 @@ sensor:
     device_class: TEMPERATURE
     state_class: measurement
     lambda: !lambda 'return id(ambient_temperature_internal).state;'
-    state_topic: !lambda return id(mqtt_id).get_topic_prefix() + "/a_t";
+    state_topic: !lambda 'return id(mqtt_id).get_topic_prefix() + "/a_t";'
     <<: *public_sensor
   - platform: template
     id: ambient_humidity
@@ -159,7 +158,7 @@ sensor:
     device_class: HUMIDITY
     state_class: measurement
     lambda: !lambda 'return id(ambient_humidity_internal).state;'
-    state_topic: !lambda return id(mqtt_id).get_topic_prefix() + "/a_h";
+    state_topic: !lambda 'return id(mqtt_id).get_topic_prefix() + "/a_h";'
     <<: *public_sensor
   - platform: template
     id: soil_temperature_v
@@ -192,6 +191,7 @@ sensor:
     device_class: TEMPERATURE
     state_class: measurement
     lambda: !lambda 'return id(soil_temperature_internal).state;'
+    state_topic: !lambda 'return id(mqtt_id).get_topic_prefix() + "/s_t";'
     <<: *public_sensor
   - platform: template
     id: soil_volumetric_water
@@ -200,9 +200,9 @@ sensor:
     unit_of_measurement: "%"
     device_class: MOISTURE
     state_class: measurement
-    state_topic: !lambda return id(mqtt_id).get_topic_prefix() + "/s_w";
     accuracy_decimals: 1
     lambda: !lambda 'return id(soil_volumetric_water_internal).state;'
+    state_topic: !lambda 'return id(mqtt_id).get_topic_prefix() + "/s_w";'
     <<: *public_sensor
 
 binary_sensor:
