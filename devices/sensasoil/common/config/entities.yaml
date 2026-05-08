@@ -1,26 +1,32 @@
-.public_sensor: &public_sensor
-  update_interval: never
-  qos: 1
-  subscribe_qos: 1
-
 substitutions:
   # Deep sleep duration mapping (minutes)
   SENSASOIL_SLEEP_MAX_MINUTES: "60"
   SENSASOIL_SLEEP_MIN_MINUTES: "10"
-  SENSASOIL_STATE_ERROR_NONE: "0"
-  # Public connection error states
-  SENSASOIL_STATE_ERROR_WIFI: "WIFI_ERROR"
-  SENSASOIL_STATE_ERROR_MQTT: "MQTT_ERROR"
-  SENSASOIL_STATE_ERROR_MQTT_ACK_TIMEOUT: "MQTT_ACK_TIMEOUT"
-  SENSASOIL_STATE_ERROR_OTA: "OTA_ERROR"
-  # Public reset error states
-  SENSASOIL_STATE_ERROR_UNKNOWN: "UNKNOWN_RESET"
-  SENSASOIL_STATE_ERROR_PANIC: "PANIC_RESET"
-  SENSASOIL_STATE_ERROR_WDT: "WDT_RESET"
-  SENSASOIL_STATE_ERROR_BROWNOUT: "BROWNOUT_RESET"
-  SENSASOIL_STATE_ERROR_EFUSE: "EFUSE_RESET"
-  SENSASOIL_STATE_ERROR_PWR_GLITCH: "PWR_GLITCH_RESET"
-  SENSASOIL_STATE_ERROR_CPU_LOCKUP: "CPU_LOCKUP_RESET"
+  # Sensors
+  CHIP_TEMPERATURE_ID: "c_t"
+  CHIP_TEMPERATURE_PRECISION: "1"
+  NETWORK_SIGNAL_ID: "n_s"
+  NETWORK_SIGNAL_PRECISION: "0"
+  BATTERY_VOLTAGE_ID: "b_v"
+  BATTERY_VOLTAGE_PRECISION: "3"
+  SOIL_TEMPERATURE_VOLTAGE_ID: "s_tv"
+  SOIL_TEMPERATURE_VOLTAGE_PRECISION: "3"
+  SOIL_VWC_VOLTAGE_ID: "s_wv"
+  SOIL_VWC_VOLTAGE_PRECISION: "3"
+  DEEP_SLEEP_DURATION_ID: "s_d"
+  DEEP_SLEEP_DURATION_PRECISION: "1"
+  BATTERY_LEVEL_ID: "b_l"
+  BATTERY_LEVEL_PRECISION: "2"
+  AMBIENT_TEMPERATURE_ID: "a_t"
+  AMBIENT_TEMPERATURE_PRECISION: "1"
+  AMBIENT_HUMIDITY_ID: "a_h"
+  AMBIENT_HUMIDITY_PRECISION: "1"
+  SOIL_TEMPERATURE_ID: "s_t"
+  SOIL_TEMPERATURE_PRECISION: "1"
+  SOIL_VWC_ID: "s_w"
+  SOIL_VWC_PRECISION: "1"
+  BATTERY_CHARGING_ID: "b_c"
+  ERROR_STATE_ID: "er"
 
 globals:
   - id: soil_probe_calibration_temperature
@@ -73,6 +79,7 @@ sensor:
           battery = 100.0f;
         }
 
+        return 0.5f; // DEBUG: force short sleep for testing
         return max_sleep_minutes - ((max_sleep_minutes - min_sleep_minutes) * (battery / 100.0f));
   - platform: template
     id: soil_temperature_internal
@@ -86,192 +93,47 @@ sensor:
     update_interval: never
     lambda: |-
       return sensasoil::compute_soil_vwc(id(soil_volumetric_water_v_internal).state, id(soil_temperature_internal).state, id(soil_probe_calibration_temperature), id(soil_probe_calibration_min_voltage), id(soil_probe_calibration_max_voltage), id(soil_probe_version));
-  # PUBLIC SENSORS #
-  - platform: template
-    id: chip_temperature
-    name: "Chip temperature"
-    unit_of_measurement: "°C"
-    accuracy_decimals: 1
-    device_class: TEMPERATURE
-    state_class: measurement
-    entity_category: "diagnostic"
-    lambda: !lambda 'return id(chip_temperature_internal).state;'
-    state_topic: !lambda 'return id(diagnostic_mode) ? id(mqtt_id).get_topic_prefix() + "/c_t" : "";'
-    <<: *public_sensor
-  - platform: template
-    id: network_signal
-    name: "Network signal"
-    accuracy_decimals: 0
-    unit_of_measurement: "dBm"
-    state_class: measurement
-    entity_category: "diagnostic"
-    device_class: SIGNAL_STRENGTH
-    state_topic: !lambda 'return id(diagnostic_mode) ? id(mqtt_id).get_topic_prefix() + "/n_s" : "";'
-    lambda: !lambda 'return id(wifi_signal_db_internal).state;'
-    <<: *public_sensor
-  - platform: template
-    id: deep_sleep_duration
-    name: "Deep sleep duration"
-    entity_category: "diagnostic"  # diagnostic for HA, but always published for external monitoring
-    icon: mdi:clock-outline
-    state_class: measurement
-    unit_of_measurement: minutes
-    lambda: !lambda 'return id(deep_sleep_duration_internal).state;'
-    state_topic: !lambda 'return id(mqtt_id).get_topic_prefix() + "/s_d";'
-    <<: *public_sensor
-  - platform: template
-    id: battery_voltage
-    name: "Battery voltage"
-    device_class: VOLTAGE
-    unit_of_measurement: "V"
-    accuracy_decimals: 3
-    entity_category: "diagnostic"
-    state_class: measurement
-    lambda: !lambda 'return id(battery_voltage_internal).state;'
-    state_topic: !lambda 'return id(diagnostic_mode) ? id(mqtt_id).get_topic_prefix() + "/b_v" : "";'
-    <<: *public_sensor
-  - platform: template
-    id: battery_level
-    name: "Battery level"
-    device_class: BATTERY
-    unit_of_measurement: "%"
-    accuracy_decimals: 2
-    state_class: measurement
-    lambda: !lambda 'return id(battery_level_internal).state;'
-    state_topic: !lambda 'return id(mqtt_id).get_topic_prefix() + "/b_l";'
-    <<: *public_sensor
-  - platform: template
-    id: ambient_temperature
-    name: "Ambient temperature"
-    accuracy_decimals: 1
-    unit_of_measurement: "°C"
-    device_class: TEMPERATURE
-    state_class: measurement
-    lambda: !lambda 'return id(ambient_temperature_internal).state;'
-    state_topic: !lambda 'return id(mqtt_id).get_topic_prefix() + "/a_t";'
-    <<: *public_sensor
-  - platform: template
-    id: ambient_humidity
-    name: "Ambient humidity"
-    accuracy_decimals: 1
-    unit_of_measurement: "%"
-    device_class: HUMIDITY
-    state_class: measurement
-    lambda: !lambda 'return id(ambient_humidity_internal).state;'
-    state_topic: !lambda 'return id(mqtt_id).get_topic_prefix() + "/a_h";'
-    <<: *public_sensor
-  - platform: template
-    id: soil_temperature_v
-    name: "Soil temperature voltage"
-    device_class: VOLTAGE
-    unit_of_measurement: "V"
-    accuracy_decimals: 3
-    entity_category: "diagnostic"
-    state_class: measurement
-    lambda: !lambda 'return id(soil_temperature_v_internal).state;'
-    state_topic: !lambda 'return id(diagnostic_mode) ? id(mqtt_id).get_topic_prefix() + "/s_tv" : "";'
-    <<: *public_sensor
-  - platform: template
-    id: soil_volumetric_water_v
-    name: "Soil volumetric water voltage"
-    unit_of_measurement: "V"
-    device_class: VOLTAGE
-    accuracy_decimals: 3
-    entity_category: "diagnostic"
-    state_class: measurement
-    lambda: !lambda 'return id(soil_volumetric_water_v_internal).state;'
-    state_topic: !lambda 'return id(diagnostic_mode) ? id(mqtt_id).get_topic_prefix() + "/s_wv" : "";'
-    <<: *public_sensor
-  - platform: template
-    id: soil_temperature
-    name: "Soil temperature"
-    icon: mdi:thermometer-probe
-    unit_of_measurement: "°C"
-    accuracy_decimals: 1
-    device_class: TEMPERATURE
-    state_class: measurement
-    lambda: !lambda 'return id(soil_temperature_internal).state;'
-    state_topic: !lambda 'return id(mqtt_id).get_topic_prefix() + "/s_t";'
-    <<: *public_sensor
-  - platform: template
-    id: soil_volumetric_water
-    name: "Soil volumetric water"
-    icon: mdi:water-percent
-    unit_of_measurement: "%"
-    device_class: MOISTURE
-    state_class: measurement
-    accuracy_decimals: 1
-    lambda: !lambda 'return id(soil_volumetric_water_internal).state;'
-    state_topic: !lambda 'return id(mqtt_id).get_topic_prefix() + "/s_w";'
-    <<: *public_sensor
-
-binary_sensor:
-  # PUBLIC SENSORS #
-  - platform: template
-    id: is_battery_charging
-    name: "Battery charging"
-    trigger_on_initial_state: true
-    device_class: BATTERY_CHARGING
-    icon: mdi:battery-charging
-    state_topic: !lambda return id(mqtt_id).get_topic_prefix() + "/b_c";
-    qos: 1
-    subscribe_qos: 1
 
 text_sensor:
   - platform: template
-    id: firmware_version
-    name: "Firmware version"
-    icon: mdi:chip
-    entity_category: "diagnostic"
-    <<: *public_sensor
-    state_topic: !lambda 'return id(mqtt_initial_connection_setup) ? id(mqtt_id).get_topic_prefix() + "/fw" : "";'
-  - platform: template
-    id: hardware_version
-    name: "Hardware version"
-    icon: mdi:memory
-    entity_category: "diagnostic"
-    <<: *public_sensor
-    state_topic: !lambda 'return id(mqtt_initial_connection_setup) ? id(mqtt_id).get_topic_prefix() + "/hw" : "";'
-  - platform: template
-    id: error_state
-    name: "Error state"
-    icon: mdi:alert-outline
-    entity_category: "diagnostic"
+    id: error_state_internal
+    internal: true
+    update_interval: never
     lambda: |-
         switch (esp_reset_reason()) {
         case ESP_RST_PANIC:
-        return std::string("${SENSASOIL_STATE_ERROR_PANIC}");
+        return std::string("PANIC_RESET");
         case ESP_RST_INT_WDT:
         case ESP_RST_TASK_WDT:
         case ESP_RST_WDT:
-        return std::string("${SENSASOIL_STATE_ERROR_WDT}");
+        return std::string("WDT_RESET");
         case ESP_RST_BROWNOUT:
-        return std::string("${SENSASOIL_STATE_ERROR_BROWNOUT}");
+        return std::string("BROWNOUT_RESET");
         case ESP_RST_EFUSE:
-        return std::string("${SENSASOIL_STATE_ERROR_EFUSE}");
+        return std::string("EFUSE_RESET");
         case ESP_RST_PWR_GLITCH:
-        return std::string("${SENSASOIL_STATE_ERROR_PWR_GLITCH}");
+        return std::string("PWR_GLITCH_RESET");
         case ESP_RST_CPU_LOCKUP:
-        return std::string("${SENSASOIL_STATE_ERROR_CPU_LOCKUP}");
+        return std::string("CPU_LOCKUP_RESET");
         default:
         break;
         }
         switch (id(last_exec_error)) {
         case sensasoil::ErrorCode::WIFI:
-        return std::string("${SENSASOIL_STATE_ERROR_WIFI}");
+        return std::string("WIFI_ERROR");
         case sensasoil::ErrorCode::OTA:
-        return std::string("${SENSASOIL_STATE_ERROR_OTA}");
+        return std::string("OTA_ERROR");
         case sensasoil::ErrorCode::MQTT:
-        return std::string("${SENSASOIL_STATE_ERROR_MQTT}");
+        return std::string("MQTT_ERROR");
         case sensasoil::ErrorCode::MQTT_ACK_TIMEOUT:
-        return std::string("${SENSASOIL_STATE_ERROR_MQTT_ACK_TIMEOUT}");
+        return std::string("MQTT_ACK_TIMEOUT");
+        case sensasoil::ErrorCode::MQTT_PUBLISH_FAILED:
+        return std::string("MQTT_PUBLISH_FAILED");
         case sensasoil::ErrorCode::NONE:
-        return std::string("${SENSASOIL_STATE_ERROR_NONE}");
+        return std::string("0");
         default:
-        return std::string("${SENSASOIL_STATE_ERROR_UNKNOWN}");
+        return std::string("UNKNOWN_ERROR");
         }
-    <<: *public_sensor
-    state_topic: !lambda return id(mqtt_id).get_topic_prefix() + "/er";
 
 light:
   - platform: monochromatic
@@ -314,52 +176,6 @@ button:
     internal: True
 
 script:
-  - id: publish_sensors
-    mode: restart
-    then:
-    # Need to yield as the MQTT publish blocks the thread and can cause a watchdog reset if we publish too much at once without yielding
-    # Sensors
-    - binary_sensor.template.publish:
-        id: is_battery_charging
-        state: !lambda return id(is_battery_charging_internal).state;
-    - delay: 1ms # yield
-    - component.update: battery_level
-    - delay: 1ms # yield
-    - component.update: deep_sleep_duration
-    - delay: 1ms # yield
-    - component.update: ambient_temperature
-    - delay: 1ms # yield
-    - component.update: ambient_humidity
-    - delay: 1ms # yield
-    - component.update: soil_temperature
-    - delay: 1ms # yield
-    - component.update: soil_volumetric_water
-    - delay: 1ms # yield
-    # Diagnostics
-    # Publish state for firmware and hardware versions (automatically published only once handled by sensor)
-    - text_sensor.template.publish:
-        id: firmware_version
-        state: "${FIRMWARE_VERSION}"
-    - delay: 1ms # yield
-    - text_sensor.template.publish:
-        id: hardware_version
-        state: "${HARDWARE_VERSION}"
-    - delay: 1ms # yield
-    - component.update: error_state
-    - delay: 1ms # yield
-    - component.update: chip_temperature
-    - delay: 1ms # yield
-    - component.update: network_signal
-    - delay: 1ms # yield
-    - component.update: soil_temperature_v
-    - delay: 1ms # yield
-    - component.update: soil_volumetric_water_v
-    - delay: 1ms # yield
-    - component.update: battery_voltage
-    - delay: 1ms # yield
-    - script.execute: publish_sensors_specific
-    - script.wait: publish_sensors_specific
-  
   - id: read_sensors
     mode: restart
     then:
@@ -373,3 +189,247 @@ script:
       - component.update: deep_sleep_duration_internal
       - component.update: wifi_signal_db_internal
       - component.update: chip_temperature_internal
+      - component.update: error_state_internal
+
+  - id: publish_sensors
+    mode: restart
+    then:
+    - lambda: |-
+        // Build the JSON payload
+        esphome::json::JsonBuilder builder;
+        JsonObject root = builder.root();
+
+        // Populate the object
+        if (id(diagnostic_mode)) {
+          root["${CHIP_TEMPERATURE_ID}"] = sensasoil::rounded_float_to_string(id(chip_temperature_internal).state, ${CHIP_TEMPERATURE_PRECISION});
+          root["${NETWORK_SIGNAL_ID}"] = sensasoil::rounded_float_to_string(id(wifi_signal_db_internal).state, ${NETWORK_SIGNAL_PRECISION});
+          root["${BATTERY_VOLTAGE_ID}"] = sensasoil::rounded_float_to_string(id(battery_voltage_internal).state, ${BATTERY_VOLTAGE_PRECISION});
+          root["${SOIL_TEMPERATURE_VOLTAGE_ID}"] = sensasoil::rounded_float_to_string(id(soil_temperature_v_internal).state, ${SOIL_TEMPERATURE_VOLTAGE_PRECISION});
+          root["${SOIL_VWC_VOLTAGE_ID}"] = sensasoil::rounded_float_to_string(id(soil_volumetric_water_v_internal).state, ${SOIL_VWC_VOLTAGE_PRECISION});
+        }
+        root["${DEEP_SLEEP_DURATION_ID}"] = sensasoil::rounded_float_to_string(id(deep_sleep_duration_internal).state, ${DEEP_SLEEP_DURATION_PRECISION});
+        root["${BATTERY_LEVEL_ID}"] = sensasoil::rounded_float_to_string(id(battery_level_internal).state, ${BATTERY_LEVEL_PRECISION});
+        root["${AMBIENT_TEMPERATURE_ID}"] = sensasoil::rounded_float_to_string(id(ambient_temperature_internal).state, ${AMBIENT_TEMPERATURE_PRECISION});
+        root["${AMBIENT_HUMIDITY_ID}"] = sensasoil::rounded_float_to_string(id(ambient_humidity_internal).state, ${AMBIENT_HUMIDITY_PRECISION});
+        root["${SOIL_TEMPERATURE_ID}"] = sensasoil::rounded_float_to_string(id(soil_temperature_internal).state, ${SOIL_TEMPERATURE_PRECISION});
+        root["${SOIL_VWC_ID}"] = sensasoil::rounded_float_to_string(id(soil_volumetric_water_internal).state, ${SOIL_VWC_PRECISION});
+        root["${BATTERY_CHARGING_ID}"] = id(is_battery_charging_internal).state ? "1" : "0";
+        root["${ERROR_STATE_ID}"] = id(error_state_internal).state;
+
+        // Serialize the object into a buffer
+        auto json_buffer = builder.serialize();
+        id(publish_mqtt_message)->execute(id(mqtt_id).get_topic_prefix() + "/${STATUS_TOPIC}", std::string(json_buffer.data(), json_buffer.size()), 1, true);
+    - script.wait: publish_mqtt_message
+
+  - id: publish_sensors_discovery
+    mode: restart
+    then:
+      - lambda: |-
+          // Skip re-sending MQTT discovery if already sent or if discovery prefix is not set
+          if (!id(mqtt_initial_connection_setup) || id(mqtt_discovery_prefix) == "") {
+            return;
+          }
+
+          // Build the JSON payload
+          esphome::json::JsonBuilder builder;
+          JsonObject root = builder.root();
+
+          // Add info
+          root[MQTT_STATE_TOPIC] = id(mqtt_id).get_topic_prefix() + "/${STATUS_TOPIC}";
+          root[MQTT_QOS] = 1;
+          char mac_base64url[sensasoil::MAC_BASE64URL_BUFFER_SIZE];
+          sensasoil::get_mac_base64url(mac_base64url);
+
+          // Create a MQTT_DEVICE object for device information
+          JsonObject dev = root[MQTT_DEVICE].to<JsonObject>();
+          dev[MQTT_DEVICE_IDENTIFIERS] = mac_base64url;
+          dev[MQTT_NAME] = "SensaSoil ${HARDWARE_VERSION} " + std::string(mac_base64url, sensasoil::MAC_BASE64URL_LENGTH);
+          dev[MQTT_DEVICE_SW_VERSION] = "${FIRMWARE_VERSION}";
+          dev[MQTT_DEVICE_HW_VERSION] = "${HARDWARE_VERSION}";
+          dev[MQTT_DEVICE_MODEL] = "SensaSoil";
+          dev[MQTT_DEVICE_MANUFACTURER] = "TierraLive";
+          char mac_buf[MAC_ADDRESS_BUFFER_SIZE];
+          get_mac_address_into_buffer(mac_buf);
+          JsonArray connections = dev[MQTT_DEVICE_CONNECTIONS].to<JsonArray>();
+          JsonArray mac_connection = connections.add<JsonArray>();
+          mac_connection.add("mac");
+          mac_connection.add(mac_buf);
+
+          // Origin
+          JsonObject origin = root["o"].to<JsonObject>();
+          origin[MQTT_NAME] = "TierraLive SensaSoil";
+
+          // Create sensors
+          JsonObject cmps = root["cmps"].to<JsonObject>();
+          char unique_id[sensasoil::MAC_UNIQUE_ID_BUFFER_SIZE];
+          JsonObject sensor;
+
+          if (id(diagnostic_mode)) { // Start of diagnostic sensors
+          // Chip temperature
+          sensor = cmps["${CHIP_TEMPERATURE_ID}"].to<JsonObject>();
+          sensasoil::build_mac_unique_id(mac_base64url, "${CHIP_TEMPERATURE_ID}", unique_id);
+          sensor[MQTT_UNIQUE_ID] = unique_id;
+          sensor["p"] = "sensor";
+          sensor[MQTT_NAME] = "Chip temperature";
+          sensor[MQTT_UNIT_OF_MEASUREMENT] = "°C";
+          sensor[MQTT_DEVICE_CLASS] = "temperature";
+          sensor[MQTT_STATE_CLASS] = "measurement";
+          sensor[MQTT_ENTITY_CATEGORY] = "diagnostic";
+          sensor[MQTT_SUGGESTED_DISPLAY_PRECISION] = ${CHIP_TEMPERATURE_PRECISION};
+          sensor[MQTT_VALUE_TEMPLATE] = "{{ value_json.${CHIP_TEMPERATURE_ID} }}";
+
+          // Network signal
+          sensor = cmps["${NETWORK_SIGNAL_ID}"].to<JsonObject>();
+          sensasoil::build_mac_unique_id(mac_base64url, "${NETWORK_SIGNAL_ID}", unique_id);
+          sensor[MQTT_UNIQUE_ID] = unique_id;
+          sensor["p"] = "sensor";
+          sensor[MQTT_NAME] = "Network signal";
+          sensor[MQTT_UNIT_OF_MEASUREMENT] = "dBm";
+          sensor[MQTT_DEVICE_CLASS] = "signal_strength";
+          sensor[MQTT_STATE_CLASS] = "measurement";
+          sensor[MQTT_ENTITY_CATEGORY] = "diagnostic";
+          sensor[MQTT_SUGGESTED_DISPLAY_PRECISION] = ${NETWORK_SIGNAL_PRECISION};
+          sensor[MQTT_VALUE_TEMPLATE] = "{{ value_json.${NETWORK_SIGNAL_ID} }}";
+
+          // Battery voltage
+          sensor = cmps["${BATTERY_VOLTAGE_ID}"].to<JsonObject>();
+          sensasoil::build_mac_unique_id(mac_base64url, "${BATTERY_VOLTAGE_ID}", unique_id);
+          sensor[MQTT_UNIQUE_ID] = unique_id;
+          sensor["p"] = "sensor";
+          sensor[MQTT_NAME] = "Battery voltage";
+          sensor[MQTT_UNIT_OF_MEASUREMENT] = "V";
+          sensor[MQTT_DEVICE_CLASS] = "voltage";
+          sensor[MQTT_STATE_CLASS] = "measurement";
+          sensor[MQTT_ENTITY_CATEGORY] = "diagnostic";
+          sensor[MQTT_SUGGESTED_DISPLAY_PRECISION] = ${BATTERY_VOLTAGE_PRECISION};
+          sensor[MQTT_VALUE_TEMPLATE] = "{{ value_json.${BATTERY_VOLTAGE_ID} }}";
+
+          // Soil temperature voltage
+          sensor = cmps["${SOIL_TEMPERATURE_VOLTAGE_ID}"].to<JsonObject>();
+          sensasoil::build_mac_unique_id(mac_base64url, "${SOIL_TEMPERATURE_VOLTAGE_ID}", unique_id);
+          sensor[MQTT_UNIQUE_ID] = unique_id;
+          sensor["p"] = "sensor";
+          sensor[MQTT_NAME] = "Soil temperature voltage";
+          sensor[MQTT_UNIT_OF_MEASUREMENT] = "V";
+          sensor[MQTT_DEVICE_CLASS] = "voltage";
+          sensor[MQTT_STATE_CLASS] = "measurement";
+          sensor[MQTT_ENTITY_CATEGORY] = "diagnostic";
+          sensor[MQTT_SUGGESTED_DISPLAY_PRECISION] = ${SOIL_TEMPERATURE_VOLTAGE_PRECISION};
+          sensor[MQTT_VALUE_TEMPLATE] = "{{ value_json.${SOIL_TEMPERATURE_VOLTAGE_ID} }}";
+
+          // Soil volumetric water voltage
+          sensor = cmps["${SOIL_VWC_VOLTAGE_ID}"].to<JsonObject>();
+          sensasoil::build_mac_unique_id(mac_base64url, "${SOIL_VWC_VOLTAGE_ID}", unique_id);
+          sensor[MQTT_UNIQUE_ID] = unique_id;
+          sensor["p"] = "sensor";
+          sensor[MQTT_NAME] = "Soil volumetric water voltage";
+          sensor[MQTT_UNIT_OF_MEASUREMENT] = "V";
+          sensor[MQTT_DEVICE_CLASS] = "voltage";
+          sensor[MQTT_STATE_CLASS] = "measurement";
+          sensor[MQTT_ENTITY_CATEGORY] = "diagnostic";
+          sensor[MQTT_SUGGESTED_DISPLAY_PRECISION] = ${SOIL_VWC_VOLTAGE_PRECISION};
+          sensor[MQTT_VALUE_TEMPLATE] = "{{ value_json.${SOIL_VWC_VOLTAGE_ID} }}";
+
+          } // End of diagnostic sensors
+
+          // Deep sleep duration
+          sensor = cmps["${DEEP_SLEEP_DURATION_ID}"].to<JsonObject>();
+          sensasoil::build_mac_unique_id(mac_base64url, "${DEEP_SLEEP_DURATION_ID}", unique_id);
+          sensor[MQTT_UNIQUE_ID] = unique_id;
+          sensor["p"] = "sensor";
+          sensor[MQTT_NAME] = "Deep sleep duration";
+          sensor[MQTT_ICON] = "mdi:clock-outline";
+          sensor[MQTT_STATE_CLASS] = "measurement";
+          sensor[MQTT_UNIT_OF_MEASUREMENT] = "minutes";
+          sensor[MQTT_ENTITY_CATEGORY] = "diagnostic";
+          sensor[MQTT_SUGGESTED_DISPLAY_PRECISION] = ${DEEP_SLEEP_DURATION_PRECISION};
+          sensor[MQTT_VALUE_TEMPLATE] = "{{ value_json.${DEEP_SLEEP_DURATION_ID} }}";
+
+          // Battery level
+          sensor = cmps["${BATTERY_LEVEL_ID}"].to<JsonObject>();
+          sensasoil::build_mac_unique_id(mac_base64url, "${BATTERY_LEVEL_ID}", unique_id);
+          sensor[MQTT_UNIQUE_ID] = unique_id;
+          sensor["p"] = "sensor";
+          sensor[MQTT_NAME] = "Battery level";
+          sensor[MQTT_UNIT_OF_MEASUREMENT] = "%";
+          sensor[MQTT_DEVICE_CLASS] = "battery";
+          sensor[MQTT_STATE_CLASS] = "measurement";
+          sensor[MQTT_SUGGESTED_DISPLAY_PRECISION] = ${BATTERY_LEVEL_PRECISION};
+          sensor[MQTT_VALUE_TEMPLATE] = "{{ value_json.${BATTERY_LEVEL_ID} }}";
+
+          // Ambient temperature
+          sensor = cmps["${AMBIENT_TEMPERATURE_ID}"].to<JsonObject>();
+          sensasoil::build_mac_unique_id(mac_base64url, "${AMBIENT_TEMPERATURE_ID}", unique_id);
+          sensor[MQTT_UNIQUE_ID] = unique_id;
+          sensor["p"] = "sensor";
+          sensor[MQTT_NAME] = "Ambient temperature";
+          sensor[MQTT_UNIT_OF_MEASUREMENT] = "°C";
+          sensor[MQTT_DEVICE_CLASS] = "temperature";
+          sensor[MQTT_STATE_CLASS] = "measurement";
+          sensor[MQTT_SUGGESTED_DISPLAY_PRECISION] = ${AMBIENT_TEMPERATURE_PRECISION};
+          sensor[MQTT_VALUE_TEMPLATE] = "{{ value_json.${AMBIENT_TEMPERATURE_ID} }}";
+
+          // Ambient humidity
+          sensor = cmps["${AMBIENT_HUMIDITY_ID}"].to<JsonObject>();
+          sensasoil::build_mac_unique_id(mac_base64url, "${AMBIENT_HUMIDITY_ID}", unique_id);
+          sensor[MQTT_UNIQUE_ID] = unique_id;
+          sensor["p"] = "sensor";
+          sensor[MQTT_NAME] = "Ambient humidity";
+          sensor[MQTT_UNIT_OF_MEASUREMENT] = "%";
+          sensor[MQTT_DEVICE_CLASS] = "humidity";
+          sensor[MQTT_STATE_CLASS] = "measurement";
+          sensor[MQTT_SUGGESTED_DISPLAY_PRECISION] = ${AMBIENT_HUMIDITY_PRECISION};
+          sensor[MQTT_VALUE_TEMPLATE] = "{{ value_json.${AMBIENT_HUMIDITY_ID} }}";
+
+          // Soil temperature
+          sensor = cmps["${SOIL_TEMPERATURE_ID}"].to<JsonObject>();
+          sensasoil::build_mac_unique_id(mac_base64url, "${SOIL_TEMPERATURE_ID}", unique_id);
+          sensor[MQTT_UNIQUE_ID] = unique_id;
+          sensor["p"] = "sensor";
+          sensor[MQTT_NAME] = "Soil temperature";
+          sensor[MQTT_ICON] = "mdi:thermometer-probe";
+          sensor[MQTT_UNIT_OF_MEASUREMENT] = "°C";
+          sensor[MQTT_DEVICE_CLASS] = "temperature";
+          sensor[MQTT_STATE_CLASS] = "measurement";
+          sensor[MQTT_SUGGESTED_DISPLAY_PRECISION] = ${SOIL_TEMPERATURE_PRECISION};
+          sensor[MQTT_VALUE_TEMPLATE] = "{{ value_json.${SOIL_TEMPERATURE_ID} }}";
+
+          // Soil volumetric water
+          sensor = cmps["${SOIL_VWC_ID}"].to<JsonObject>();
+          sensasoil::build_mac_unique_id(mac_base64url, "${SOIL_VWC_ID}", unique_id);
+          sensor[MQTT_UNIQUE_ID] = unique_id;
+          sensor["p"] = "sensor";
+          sensor[MQTT_NAME] = "Soil volumetric water";
+          sensor[MQTT_ICON] = "mdi:water-percent";
+          sensor[MQTT_UNIT_OF_MEASUREMENT] = "%";
+          sensor[MQTT_DEVICE_CLASS] = "moisture";
+          sensor[MQTT_STATE_CLASS] = "measurement";
+          sensor[MQTT_SUGGESTED_DISPLAY_PRECISION] = ${SOIL_VWC_PRECISION};
+          sensor[MQTT_VALUE_TEMPLATE] = "{{ value_json.${SOIL_VWC_ID} }}";
+
+          // Battery charging
+          sensor = cmps["${BATTERY_CHARGING_ID}"].to<JsonObject>();
+          sensasoil::build_mac_unique_id(mac_base64url, "${BATTERY_CHARGING_ID}", unique_id);
+          sensor[MQTT_UNIQUE_ID] = unique_id;
+          sensor["p"] = "binary_sensor";
+          sensor[MQTT_NAME] = "Battery charging";
+          sensor[MQTT_DEVICE_CLASS] = "battery_charging";
+          sensor[MQTT_PAYLOAD_ON] = "1";
+          sensor[MQTT_PAYLOAD_OFF] = "0";
+          sensor[MQTT_VALUE_TEMPLATE] = "{{ value_json.${BATTERY_CHARGING_ID} }}";
+
+          // Error state
+          sensor = cmps["${ERROR_STATE_ID}"].to<JsonObject>();
+          sensasoil::build_mac_unique_id(mac_base64url, "${ERROR_STATE_ID}", unique_id);
+          sensor[MQTT_UNIQUE_ID] = unique_id;
+          sensor["p"] = "sensor";
+          sensor[MQTT_NAME] = "Error state";
+          sensor[MQTT_ICON] = "mdi:alert-outline";
+          sensor[MQTT_ENTITY_CATEGORY] = "diagnostic";
+          sensor[MQTT_VALUE_TEMPLATE] = "{{ value_json.${ERROR_STATE_ID} }}";
+
+          // Serialize the object into a buffer
+          auto json_buffer = builder.serialize();
+          // Publish the discovery message
+          id(publish_mqtt_message)->execute(id(mqtt_discovery_prefix) + "/device/" + std::string(mac_base64url, sensasoil::MAC_BASE64URL_LENGTH) + "/config", std::string(json_buffer.data(), json_buffer.size()), 1, true);
+      - script.wait: publish_mqtt_message

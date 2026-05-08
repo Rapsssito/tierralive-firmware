@@ -1,8 +1,3 @@
-.public_sensor: &public_sensor
-  update_interval: never
-  qos: 1
-  subscribe_qos: 1
-
 globals:
   - id: soil_probe_version
     type: sensasoil::SoilProbeVersion
@@ -115,12 +110,6 @@ switch:
         - lambda: ! id(power_sensors_time) = millis();
 
 script:
-  - id: publish_sensors_specific
-    mode: restart
-    then:
-      # Nothing to publish
-      - delay: 1ms
-
   - id: read_sensors_specific
     mode: restart
     then:

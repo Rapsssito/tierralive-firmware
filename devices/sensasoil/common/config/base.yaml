@@ -89,6 +89,8 @@ script:
       - script.execute: perform_initial_connection
       - script.wait: perform_initial_connection
       # Publish sensor states
+      - script.execute: publish_sensors_discovery
+      - script.wait: publish_sensors_discovery
       - script.execute: publish_sensors
       - script.wait: publish_sensors
       # Mark boot successful to prevent safe mode from false-triggering on next boot after a successful setup

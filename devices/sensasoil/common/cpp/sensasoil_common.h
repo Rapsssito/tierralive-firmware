@@ -31,11 +31,12 @@ enum class ExtendedImprovCommand : uint8_t {
  * @brief Error codes for device operation states
  */
 enum class ErrorCode : uint8_t {
-  NONE,             ///< No error
-  WIFI,             ///< WiFi connection error
-  MQTT,             ///< MQTT connection error
-  MQTT_ACK_TIMEOUT, ///< MQTT acknowledgment timeout
-  OTA               ///< Over-The-Air update error
+  NONE,                ///< No error
+  WIFI,                ///< WiFi connection error
+  MQTT,                ///< MQTT connection error
+  MQTT_ACK_TIMEOUT,    ///< MQTT acknowledgment timeout
+  MQTT_PUBLISH_FAILED, ///< MQTT publish failure
+  OTA                  ///< Over-The-Air update error
 };
 
 /**
@@ -56,6 +57,60 @@ enum class SoilProbeVersion : uint8_t { V3, V4, V5 };
  */
 inline std::string make_string(const uint8_t *bytes, size_t length) {
   return std::string(reinterpret_cast<const char *>(bytes), length);
+}
+
+/**
+ * @brief Convert float to a rounded decimal string with fixed precision.
+ *
+ * NaN and Infinity are preserved as textual values.
+ */
+inline std::string rounded_float_to_string(const float value,
+                                           const uint8_t precision) {
+  char buf[VALUE_ACCURACY_MAX_LEN];
+  size_t len = value_accuracy_to_buf(buf, value, precision);
+  return std::string(buf, len);
+}
+
+static constexpr size_t MAC_RAW_LENGTH = 6;
+static constexpr size_t MAC_BASE64URL_LENGTH = 8;
+static constexpr size_t MAC_BASE64URL_BUFFER_SIZE = MAC_BASE64URL_LENGTH + 1;
+static constexpr size_t MAC_UNIQUE_ID_MAX_ENTITY_ID_LENGTH = 6;
+static constexpr size_t MAC_UNIQUE_ID_BUFFER_SIZE =
+    MAC_BASE64URL_LENGTH + 1 + MAC_UNIQUE_ID_MAX_ENTITY_ID_LENGTH + 1;
+
+/**
+ * @brief Encode device MAC into a null-terminated Base64URL string.
+ *
+ * Encodes the 6-byte MAC address into 8 Base64URL characters using only
+ * stack buffers (no heap allocation).
+ */
+inline void get_mac_base64url(char (&out)[MAC_BASE64URL_BUFFER_SIZE]) {
+  static constexpr char BASE64URL_TABLE[] =
+      "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
+
+  uint8_t mac[MAC_RAW_LENGTH];
+  get_mac_address_raw(mac);
+
+  size_t out_idx = 0;
+  for (size_t i = 0; i < MAC_RAW_LENGTH; i += 3) {
+    const uint32_t block = (static_cast<uint32_t>(mac[i]) << 16) |
+                           (static_cast<uint32_t>(mac[i + 1]) << 8) |
+                           static_cast<uint32_t>(mac[i + 2]);
+    out[out_idx++] = BASE64URL_TABLE[(block >> 18) & 0x3F];
+    out[out_idx++] = BASE64URL_TABLE[(block >> 12) & 0x3F];
+    out[out_idx++] = BASE64URL_TABLE[(block >> 6) & 0x3F];
+    out[out_idx++] = BASE64URL_TABLE[block & 0x3F];
+  }
+  out[out_idx] = '\0';
+}
+
+
+/**
+ * @brief Build MQTT unique_id in the format "<mac_hex>-<entity_id>".
+ */
+inline void build_mac_unique_id(const char *mac_hex, const char *entity_id,
+                                char (&out)[MAC_UNIQUE_ID_BUFFER_SIZE]) {
+  snprintf(out, MAC_UNIQUE_ID_BUFFER_SIZE, "%s-%s", mac_hex, entity_id);
 }
 
 /**
