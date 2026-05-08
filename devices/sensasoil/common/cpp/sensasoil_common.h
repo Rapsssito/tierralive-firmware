@@ -74,9 +74,47 @@ inline std::string rounded_float_to_string(const float value,
 static constexpr size_t MAC_RAW_LENGTH = 6;
 static constexpr size_t MAC_BASE64URL_LENGTH = 8;
 static constexpr size_t MAC_BASE64URL_BUFFER_SIZE = MAC_BASE64URL_LENGTH + 1;
+static constexpr size_t MAC_BASE32_LENGTH = 10;
+static constexpr size_t MAC_BASE32_BUFFER_SIZE = MAC_BASE32_LENGTH + 1;
 static constexpr size_t MAC_UNIQUE_ID_MAX_ENTITY_ID_LENGTH = 6;
 static constexpr size_t MAC_UNIQUE_ID_BUFFER_SIZE =
-    MAC_BASE64URL_LENGTH + 1 + MAC_UNIQUE_ID_MAX_ENTITY_ID_LENGTH + 1;
+    MAC_BASE32_BUFFER_SIZE + 1 + MAC_UNIQUE_ID_MAX_ENTITY_ID_LENGTH + 1;
+
+/**
+ * @brief Encode device MAC into a null-terminated Base32 string (case-insensitive).
+ *
+ * Encodes the 6-byte MAC address into 10 Base32 characters (RFC 4648) using only
+ * stack buffers (no heap allocation). Base32 is case-insensitive, using uppercase
+ * letters A-Z and digits 2-7.
+ */
+inline void get_mac_base32(char (&out)[MAC_BASE32_BUFFER_SIZE]) {
+  static constexpr char BASE32_TABLE[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
+
+  uint8_t mac[MAC_RAW_LENGTH];
+  get_mac_address_raw(mac);
+
+  size_t out_idx = 0;
+  // Process 5 bytes at a time (40 bits = 8 Base32 characters)
+  // First 5 bytes
+  out[out_idx++] = BASE32_TABLE[(mac[0] >> 3) & 0x1F];
+  out[out_idx++] =
+      BASE32_TABLE[(((mac[0] & 0x07) << 2) | (mac[1] >> 6)) & 0x1F];
+  out[out_idx++] = BASE32_TABLE[(mac[1] >> 1) & 0x1F];
+  out[out_idx++] =
+      BASE32_TABLE[(((mac[1] & 0x01) << 4) | (mac[2] >> 4)) & 0x1F];
+  out[out_idx++] =
+      BASE32_TABLE[(((mac[2] & 0x0F) << 1) | (mac[3] >> 7)) & 0x1F];
+  out[out_idx++] = BASE32_TABLE[(mac[3] >> 2) & 0x1F];
+  out[out_idx++] =
+      BASE32_TABLE[(((mac[3] & 0x03) << 3) | (mac[4] >> 5)) & 0x1F];
+  out[out_idx++] = BASE32_TABLE[mac[4] & 0x1F];
+
+  // Last byte (6th byte)
+  out[out_idx++] = BASE32_TABLE[(mac[5] >> 3) & 0x1F];
+  out[out_idx++] = BASE32_TABLE[((mac[5] & 0x07) << 2) & 0x1F];
+
+  out[out_idx] = '\0';
+}
 
 /**
  * @brief Encode device MAC into a null-terminated Base64URL string.

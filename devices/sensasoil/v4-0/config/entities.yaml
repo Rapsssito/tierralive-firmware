@@ -71,9 +71,11 @@ binary_sensor:
         then:
           # Turn off the red LED when charging is done, turn on otherwise
           - lambda: |-
-              if (x) {
+              if (x && id(pg_gpo_switch).state) {
                 id(pg_gpo_switch)->turn_off();
-              } else {
+                return;
+              }
+              if (!x && !id(pg_gpo_switch).state) {
                 id(pg_gpo_switch)->turn_on();
               }
     charging:

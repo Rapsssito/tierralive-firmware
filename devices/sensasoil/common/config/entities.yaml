@@ -79,7 +79,6 @@ sensor:
           battery = 100.0f;
         }
 
-        return 0.5f; // DEBUG: force short sleep for testing
         return max_sleep_minutes - ((max_sleep_minutes - min_sleep_minutes) * (battery / 100.0f));
   - platform: template
     id: soil_temperature_internal
@@ -237,23 +236,24 @@ script:
           // Add info
           root[MQTT_STATE_TOPIC] = id(mqtt_id).get_topic_prefix() + "/${STATUS_TOPIC}";
           root[MQTT_QOS] = 1;
-          char mac_base64url[sensasoil::MAC_BASE64URL_BUFFER_SIZE];
-          sensasoil::get_mac_base64url(mac_base64url);
+
+          char mac_base32[sensasoil::MAC_BASE32_BUFFER_SIZE];
+          sensasoil::get_mac_base32(mac_base32);
 
           // Create a MQTT_DEVICE object for device information
           JsonObject dev = root[MQTT_DEVICE].to<JsonObject>();
-          dev[MQTT_DEVICE_IDENTIFIERS] = mac_base64url;
-          dev[MQTT_NAME] = "SensaSoil ${HARDWARE_VERSION} " + std::string(mac_base64url, sensasoil::MAC_BASE64URL_LENGTH);
+          dev[MQTT_DEVICE_IDENTIFIERS] = mac_base32;
+          dev[MQTT_NAME] = App.get_friendly_name() + " " + std::string(mac_base32, sensasoil::MAC_BASE32_LENGTH);
           dev[MQTT_DEVICE_SW_VERSION] = "${FIRMWARE_VERSION}";
           dev[MQTT_DEVICE_HW_VERSION] = "${HARDWARE_VERSION}";
           dev[MQTT_DEVICE_MODEL] = "SensaSoil";
           dev[MQTT_DEVICE_MANUFACTURER] = "TierraLive";
-          char mac_buf[MAC_ADDRESS_BUFFER_SIZE];
-          get_mac_address_into_buffer(mac_buf);
           JsonArray connections = dev[MQTT_DEVICE_CONNECTIONS].to<JsonArray>();
           JsonArray mac_connection = connections.add<JsonArray>();
           mac_connection.add("mac");
-          mac_connection.add(mac_buf);
+          char mac_hex[MAC_ADDRESS_BUFFER_SIZE];
+          get_mac_address_into_buffer(mac_hex);
+          mac_connection.add(mac_hex);
 
           // Origin
           JsonObject origin = root["o"].to<JsonObject>();
@@ -267,7 +267,7 @@ script:
           if (id(diagnostic_mode)) { // Start of diagnostic sensors
           // Chip temperature
           sensor = cmps["${CHIP_TEMPERATURE_ID}"].to<JsonObject>();
-          sensasoil::build_mac_unique_id(mac_base64url, "${CHIP_TEMPERATURE_ID}", unique_id);
+          sensasoil::build_mac_unique_id(mac_base32, "${CHIP_TEMPERATURE_ID}", unique_id);
           sensor[MQTT_UNIQUE_ID] = unique_id;
           sensor["p"] = "sensor";
           sensor[MQTT_NAME] = "Chip temperature";
@@ -280,7 +280,7 @@ script:
 
           // Network signal
           sensor = cmps["${NETWORK_SIGNAL_ID}"].to<JsonObject>();
-          sensasoil::build_mac_unique_id(mac_base64url, "${NETWORK_SIGNAL_ID}", unique_id);
+          sensasoil::build_mac_unique_id(mac_base32, "${NETWORK_SIGNAL_ID}", unique_id);
           sensor[MQTT_UNIQUE_ID] = unique_id;
           sensor["p"] = "sensor";
           sensor[MQTT_NAME] = "Network signal";
@@ -293,7 +293,7 @@ script:
 
           // Battery voltage
           sensor = cmps["${BATTERY_VOLTAGE_ID}"].to<JsonObject>();
-          sensasoil::build_mac_unique_id(mac_base64url, "${BATTERY_VOLTAGE_ID}", unique_id);
+          sensasoil::build_mac_unique_id(mac_base32, "${BATTERY_VOLTAGE_ID}", unique_id);
           sensor[MQTT_UNIQUE_ID] = unique_id;
           sensor["p"] = "sensor";
           sensor[MQTT_NAME] = "Battery voltage";
@@ -306,7 +306,7 @@ script:
 
           // Soil temperature voltage
           sensor = cmps["${SOIL_TEMPERATURE_VOLTAGE_ID}"].to<JsonObject>();
-          sensasoil::build_mac_unique_id(mac_base64url, "${SOIL_TEMPERATURE_VOLTAGE_ID}", unique_id);
+          sensasoil::build_mac_unique_id(mac_base32, "${SOIL_TEMPERATURE_VOLTAGE_ID}", unique_id);
           sensor[MQTT_UNIQUE_ID] = unique_id;
           sensor["p"] = "sensor";
           sensor[MQTT_NAME] = "Soil temperature voltage";
@@ -319,7 +319,7 @@ script:
 
           // Soil volumetric water voltage
           sensor = cmps["${SOIL_VWC_VOLTAGE_ID}"].to<JsonObject>();
-          sensasoil::build_mac_unique_id(mac_base64url, "${SOIL_VWC_VOLTAGE_ID}", unique_id);
+          sensasoil::build_mac_unique_id(mac_base32, "${SOIL_VWC_VOLTAGE_ID}", unique_id);
           sensor[MQTT_UNIQUE_ID] = unique_id;
           sensor["p"] = "sensor";
           sensor[MQTT_NAME] = "Soil volumetric water voltage";
@@ -334,7 +334,7 @@ script:
 
           // Deep sleep duration
           sensor = cmps["${DEEP_SLEEP_DURATION_ID}"].to<JsonObject>();
-          sensasoil::build_mac_unique_id(mac_base64url, "${DEEP_SLEEP_DURATION_ID}", unique_id);
+          sensasoil::build_mac_unique_id(mac_base32, "${DEEP_SLEEP_DURATION_ID}", unique_id);
           sensor[MQTT_UNIQUE_ID] = unique_id;
           sensor["p"] = "sensor";
           sensor[MQTT_NAME] = "Deep sleep duration";
@@ -347,7 +347,7 @@ script:
 
           // Battery level
           sensor = cmps["${BATTERY_LEVEL_ID}"].to<JsonObject>();
-          sensasoil::build_mac_unique_id(mac_base64url, "${BATTERY_LEVEL_ID}", unique_id);
+          sensasoil::build_mac_unique_id(mac_base32, "${BATTERY_LEVEL_ID}", unique_id);
           sensor[MQTT_UNIQUE_ID] = unique_id;
           sensor["p"] = "sensor";
           sensor[MQTT_NAME] = "Battery level";
@@ -359,7 +359,7 @@ script:
 
           // Ambient temperature
           sensor = cmps["${AMBIENT_TEMPERATURE_ID}"].to<JsonObject>();
-          sensasoil::build_mac_unique_id(mac_base64url, "${AMBIENT_TEMPERATURE_ID}", unique_id);
+          sensasoil::build_mac_unique_id(mac_base32, "${AMBIENT_TEMPERATURE_ID}", unique_id);
           sensor[MQTT_UNIQUE_ID] = unique_id;
           sensor["p"] = "sensor";
           sensor[MQTT_NAME] = "Ambient temperature";
@@ -371,7 +371,7 @@ script:
 
           // Ambient humidity
           sensor = cmps["${AMBIENT_HUMIDITY_ID}"].to<JsonObject>();
-          sensasoil::build_mac_unique_id(mac_base64url, "${AMBIENT_HUMIDITY_ID}", unique_id);
+          sensasoil::build_mac_unique_id(mac_base32, "${AMBIENT_HUMIDITY_ID}", unique_id);
           sensor[MQTT_UNIQUE_ID] = unique_id;
           sensor["p"] = "sensor";
           sensor[MQTT_NAME] = "Ambient humidity";
@@ -383,7 +383,7 @@ script:
 
           // Soil temperature
           sensor = cmps["${SOIL_TEMPERATURE_ID}"].to<JsonObject>();
-          sensasoil::build_mac_unique_id(mac_base64url, "${SOIL_TEMPERATURE_ID}", unique_id);
+          sensasoil::build_mac_unique_id(mac_base32, "${SOIL_TEMPERATURE_ID}", unique_id);
           sensor[MQTT_UNIQUE_ID] = unique_id;
           sensor["p"] = "sensor";
           sensor[MQTT_NAME] = "Soil temperature";
@@ -396,7 +396,7 @@ script:
 
           // Soil volumetric water
           sensor = cmps["${SOIL_VWC_ID}"].to<JsonObject>();
-          sensasoil::build_mac_unique_id(mac_base64url, "${SOIL_VWC_ID}", unique_id);
+          sensasoil::build_mac_unique_id(mac_base32, "${SOIL_VWC_ID}", unique_id);
           sensor[MQTT_UNIQUE_ID] = unique_id;
           sensor["p"] = "sensor";
           sensor[MQTT_NAME] = "Soil volumetric water";
@@ -409,7 +409,7 @@ script:
 
           // Battery charging
           sensor = cmps["${BATTERY_CHARGING_ID}"].to<JsonObject>();
-          sensasoil::build_mac_unique_id(mac_base64url, "${BATTERY_CHARGING_ID}", unique_id);
+          sensasoil::build_mac_unique_id(mac_base32, "${BATTERY_CHARGING_ID}", unique_id);
           sensor[MQTT_UNIQUE_ID] = unique_id;
           sensor["p"] = "binary_sensor";
           sensor[MQTT_NAME] = "Battery charging";
@@ -420,7 +420,7 @@ script:
 
           // Error state
           sensor = cmps["${ERROR_STATE_ID}"].to<JsonObject>();
-          sensasoil::build_mac_unique_id(mac_base64url, "${ERROR_STATE_ID}", unique_id);
+          sensasoil::build_mac_unique_id(mac_base32, "${ERROR_STATE_ID}", unique_id);
           sensor[MQTT_UNIQUE_ID] = unique_id;
           sensor["p"] = "sensor";
           sensor[MQTT_NAME] = "Error state";
@@ -428,6 +428,8 @@ script:
           sensor[MQTT_ENTITY_CATEGORY] = "diagnostic";
           sensor[MQTT_VALUE_TEMPLATE] = "{{ value_json.${ERROR_STATE_ID} }}";
 
+          char mac_base64url[sensasoil::MAC_BASE64URL_BUFFER_SIZE];
+          sensasoil::get_mac_base64url(mac_base64url);
           // Serialize the object into a buffer
           auto json_buffer = builder.serialize();
           // Publish the discovery message
