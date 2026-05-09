@@ -30,10 +30,19 @@ sensor:
       id: battery_level_internal
       internal: true
       filters:
-        # Make sure it stays between 0 and 100 since max17048 can be a bit optimistic
-        - clamp:
-            min_value: 0
-            max_value: 100
+        - lambda: |-
+            switch (id(battery_floating_mode)) {
+              case sensasoil::BatteryFloatingMode::MAX_CAPACITY:
+                return MAX(0.0f, MIN(x, 100.0f));
+              case sensasoil::BatteryFloatingMode::MAX_LIFESPAN:
+                // In MAX_LIFESPAN mode, the battery level is capped at 60%, interpolate linearly
+                return MAX(0.0f, MIN(x * (100.0f / 60.0f), 100.0f));
+              case sensasoil::BatteryFloatingMode::BALANCED:
+                // In BALANCED mode, the battery level is capped at 80%, interpolate linearly
+                return MAX(0.0f, MIN(x * (100.0f / 80.0f), 100.0f));
+              default:
+                return x;
+            }
   - platform: hdc302x
     id: temperature_humidity_sensor
     address: 0x44
@@ -143,7 +152,6 @@ script:
       - component.update: bq25186_charger
       - component.update: temperature_humidity_sensor
       - delay: 1ms # yield
-      # Publish state of diagnistics
       # Wait (hardware dependent delay)
       - delay: !lambda |-
           const unsigned long elapsed = millis() - id(power_sensors_time);

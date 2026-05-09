@@ -2,6 +2,11 @@ packages:
   sensasoil_common: !include ../../common/config/common.yaml
   entities: !include entities.yaml
 
+substitutions:
+  HARDWARE_VERSION: "4.0"
+  HARDWARE_VERSION_FLAT: "4-0"
+  FIRMWARE_VERSION: !env_var FIRMWARE_VERSION
+
 esp32:
   variant: ESP32C6
   framework:
@@ -11,11 +16,9 @@ esphome:
   on_boot:
     - priority: -100
       then:
-        - if:
-            condition:
-              lambda: !lambda 'return (id(manual_reset) || id(mqtt_initial_connection_setup));'
-            then:
-              - bq25186.apply_configuration: bq25186_charger
+        - script.execute:
+            id: setup_charger
+            force_apply: false
 
 i2c:
   - id: i2c_bus
@@ -32,6 +35,7 @@ bq25186:
   configure_on_boot: false
   update_interval: never
   fast_charge_current: 400
+  battery_regulation_voltage: 4000  # By default, reduce strain on the battery by floating it at 4.0V instead of 4.2V
   watchdog: disabled
   vindpm_mode: battery_tracking
   battery_ocp_limit: 1500ma
@@ -46,7 +50,39 @@ bq25186:
   mask_bat_interrupt: true
   mask_pg_interrupt: true
 
-substitutions:
-  HARDWARE_VERSION: "4.0"
-  HARDWARE_VERSION_FLAT: "4-0"
-  FIRMWARE_VERSION: !env_var FIRMWARE_VERSION
+script:
+  - id: setup_charger
+    mode: restart
+    parameters:
+      force_apply: bool
+    then:
+      - lambda: |-
+          // Do not apply the configuration unless manual_reset, initial connection or force is true
+          if (!(id(manual_reset) || id(mqtt_initial_connection_setup) || force_apply)) {
+            id(setup_charger)->stop();
+            return;
+          }
+      - if:
+          condition:
+            lambda: 'return id(battery_floating_mode) == sensasoil::BatteryFloatingMode::MAX_LIFESPAN;'
+          then:
+            - bq25186.apply_configuration: 
+                id: bq25186_charger
+                battery_regulation_voltage: 3800
+            - script.stop: setup_charger
+      - if:
+          condition:
+            lambda: 'return id(battery_floating_mode) == sensasoil::BatteryFloatingMode::BALANCED;'
+          then:
+            - bq25186.apply_configuration: 
+                id: bq25186_charger
+                battery_regulation_voltage: 4000
+            - script.stop: setup_charger
+      - if:
+          condition:
+            lambda: 'return id(battery_floating_mode) == sensasoil::BatteryFloatingMode::MAX_CAPACITY;'
+          then:
+            - bq25186.apply_configuration: 
+                id: bq25186_charger
+                battery_regulation_voltage: 4200
+            - script.stop: setup_charger

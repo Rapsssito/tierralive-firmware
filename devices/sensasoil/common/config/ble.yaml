@@ -39,7 +39,6 @@ esp32_ble:
   enable_on_boot: False
   max_connections: 1
 
-# TODO: Test all improv RPC command flow works for connections
 esp32_ble_server:
   id: ble_server
   manufacturer: TierraLive
@@ -244,6 +243,30 @@ esp32_ble_server:
                               id(diagnostic_mode) = false;
                             }
                             id(main_script)->execute();
+                            break;
+                          }
+                          case sensasoil::ExtendedImprovCommand::BATTERY_SETTINGS: {
+                            if (command.data.size() == 1) {
+                              ESP_LOGD("ExtendedImprov", "Request of battery settings received");
+                              id(improv_battery_show_config)->execute();
+                              break;
+                            }
+                            ESP_LOGD("ExtendedImprov", "Battery settings command received");
+                            if (!ensure_expected_length(command.data, 2)) break;
+                            uint8_t mode = command.data[1][0];
+                            switch (mode) {
+                              case static_cast<uint8_t>(sensasoil::BatteryFloatingMode::MAX_LIFESPAN):
+                                id(battery_floating_mode) = sensasoil::BatteryFloatingMode::MAX_LIFESPAN;
+                                break;
+                              case static_cast<uint8_t>(sensasoil::BatteryFloatingMode::BALANCED):
+                                id(battery_floating_mode) = sensasoil::BatteryFloatingMode::BALANCED;
+                                break;
+                              case static_cast<uint8_t>(sensasoil::BatteryFloatingMode::MAX_CAPACITY):
+                                id(battery_floating_mode) = sensasoil::BatteryFloatingMode::MAX_CAPACITY;
+                                break;
+                              default:
+                                ESP_LOGW("ExtendedImprov", "Unknown battery settings mode received: %d", mode);
+                            }
                             break;
                           }
                           case sensasoil::ExtendedImprovCommand::REFRESH_SENSORS:
@@ -503,6 +526,19 @@ script:
           response.emplace_back(sensasoil::make_string(&response_command, 1));
           uint8_t diagnostic_enabled = id(diagnostic_mode) ? 1 : 0;
           response.emplace_back(sensasoil::make_string(&diagnostic_enabled, 1));
+          id(improv_rpc_result)->set_value(improv::build_rpc_response(improv::CUSTOM, response, true));
+          id(improv_rpc_result)->notify();
+
+  - id: improv_battery_show_config
+    then:
+      - lambda: |-
+          ESP_LOGD("ExtendedImprov", "Request of battery settings received");
+          uint8_t response_command = static_cast<uint8_t>(sensasoil::ExtendedImprovCommand::BATTERY_SETTINGS);
+          std::vector<std::string> response;
+          response.reserve(2);
+          response.emplace_back(sensasoil::make_string(&response_command, 1));
+          uint8_t battery_mode = static_cast<uint8_t>(id(battery_floating_mode));
+          response.emplace_back(sensasoil::make_string(&battery_mode, 1));
           id(improv_rpc_result)->set_value(improv::build_rpc_response(improv::CUSTOM, response, true));
           id(improv_rpc_result)->notify();
 

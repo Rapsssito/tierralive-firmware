@@ -22,9 +22,10 @@ enum class ExtendedImprovCommand : uint8_t {
   DIAGNOSTIC = 2,         ///< Read or write diagnostic settings
   REFRESH_SENSORS = 3,    ///< Trigger refresh of all sensor readings
   CALIBRATION = 4,        ///< Read or write calibration settings
-  WIFI_VIEW_SETTINGS = 5, ///< Read current WiFi settings
-  MQTT_SETTINGS = 6,      ///< Read or write MQTT settings
-  CELLULAR_SETTINGS = 7,  ///< Read or write cellular settings
+  BATTERY_SETTINGS = 5,   ///< Read or write battery management settings
+  WIFI_VIEW_SETTINGS = 6, ///< Read current WiFi settings
+  MQTT_SETTINGS = 7,      ///< Read or write MQTT settings
+  CELLULAR_SETTINGS = 8,  ///< Read or write cellular settings (TODO: not implemented yet)
 };
 
 /**
@@ -43,6 +44,15 @@ enum class ErrorCode : uint8_t {
  * @brief Soil capacitor sensor versions
  */
 enum class SoilProbeVersion : uint8_t { V3, V4, V5 };
+
+/**
+ * @brief Battery capacity / lifespan floating mode
+ */
+enum class BatteryFloatingMode : uint8_t {
+  MAX_LIFESPAN = 0, // Floating at 3.8V -> 60% capacity / 6,000 – 10,000+ cycles
+  BALANCED = 1, // Floating at 4.0V -> 80% capacity / 1,200 - 2,000 cycles
+  MAX_CAPACITY = 2 // Floating at 4.2V -> 100% capacity / 300 - 500 cycles
+};
 
 /**
  * @brief Convert raw bytes to std::string with explicit length
@@ -81,11 +91,12 @@ static constexpr size_t MAC_UNIQUE_ID_BUFFER_SIZE =
     MAC_BASE32_BUFFER_SIZE + 1 + MAC_UNIQUE_ID_MAX_ENTITY_ID_LENGTH + 1;
 
 /**
- * @brief Encode device MAC into a null-terminated Base32 string (case-insensitive).
+ * @brief Encode device MAC into a null-terminated Base32 string
+ * (case-insensitive).
  *
- * Encodes the 6-byte MAC address into 10 Base32 characters (RFC 4648) using only
- * stack buffers (no heap allocation). Base32 is case-insensitive, using uppercase
- * letters A-Z and digits 2-7.
+ * Encodes the 6-byte MAC address into 10 Base32 characters (RFC 4648) using
+ * only stack buffers (no heap allocation). Base32 is case-insensitive, using
+ * uppercase letters A-Z and digits 2-7.
  */
 inline void get_mac_base32(char (&out)[MAC_BASE32_BUFFER_SIZE]) {
   static constexpr char BASE32_TABLE[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
@@ -141,7 +152,6 @@ inline void get_mac_base64url(char (&out)[MAC_BASE64URL_BUFFER_SIZE]) {
   }
   out[out_idx] = '\0';
 }
-
 
 /**
  * @brief Build MQTT unique_id in the format "<mac_hex>-<entity_id>".

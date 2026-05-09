@@ -44,6 +44,11 @@ globals:
     restore_value: yes
     initial_value: "0.970f"
     update_interval: ${SAVE_TO_STORAGE_USER_CONFIG_INTERVAL}
+  - id: battery_floating_mode
+    type: sensasoil::BatteryFloatingMode
+    restore_value: yes
+    initial_value: "sensasoil::BatteryFloatingMode::MAX_LIFESPAN"
+    update_interval: never
   # INTERNAL #
   - id: diagnostic_mode
     type: bool
