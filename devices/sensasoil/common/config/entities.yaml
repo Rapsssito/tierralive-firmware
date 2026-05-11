@@ -32,17 +32,17 @@ globals:
   - id: soil_probe_calibration_temperature
     type: float
     restore_value: yes
-    initial_value: "21.9f"
+    initial_value: "20.9f"
     update_interval: ${SAVE_TO_STORAGE_USER_CONFIG_INTERVAL}
   - id: soil_probe_calibration_max_voltage
     type: float
     restore_value: yes
-    initial_value: "2.876f"
+    initial_value: "2.955f"
     update_interval: ${SAVE_TO_STORAGE_USER_CONFIG_INTERVAL}
   - id: soil_probe_calibration_min_voltage
     type: float
     restore_value: yes
-    initial_value: "0.970f"
+    initial_value: "1.033f"
     update_interval: ${SAVE_TO_STORAGE_USER_CONFIG_INTERVAL}
   - id: battery_floating_mode
     type: sensasoil::BatteryFloatingMode
@@ -204,20 +204,33 @@ script:
         JsonObject root = builder.root();
 
         // Populate the object
+        static char value_buffer[VALUE_ACCURACY_MAX_LEN];
+        size_t value_len;
         if (id(diagnostic_mode)) {
-          root["${CHIP_TEMPERATURE_ID}"] = sensasoil::rounded_float_to_string(id(chip_temperature_internal).state, ${CHIP_TEMPERATURE_PRECISION});
-          root["${NETWORK_SIGNAL_ID}"] = sensasoil::rounded_float_to_string(id(wifi_signal_db_internal).state, ${NETWORK_SIGNAL_PRECISION});
-          root["${BATTERY_VOLTAGE_ID}"] = sensasoil::rounded_float_to_string(id(battery_voltage_internal).state, ${BATTERY_VOLTAGE_PRECISION});
-          root["${SOIL_TEMPERATURE_VOLTAGE_ID}"] = sensasoil::rounded_float_to_string(id(soil_temperature_v_internal).state, ${SOIL_TEMPERATURE_VOLTAGE_PRECISION});
-          root["${SOIL_VWC_VOLTAGE_ID}"] = sensasoil::rounded_float_to_string(id(soil_volumetric_water_v_internal).state, ${SOIL_VWC_VOLTAGE_PRECISION});
+          value_len = value_accuracy_to_buf(value_buffer, id(chip_temperature_internal).state, ${CHIP_TEMPERATURE_PRECISION});
+          root["${CHIP_TEMPERATURE_ID}"] = serialized(value_buffer, value_len);
+          value_len = value_accuracy_to_buf(value_buffer, id(wifi_signal_db_internal).state, ${NETWORK_SIGNAL_PRECISION});
+          root["${NETWORK_SIGNAL_ID}"] = serialized(value_buffer, value_len);
+          value_len = value_accuracy_to_buf(value_buffer, id(battery_voltage_internal).state, ${BATTERY_VOLTAGE_PRECISION});
+          root["${BATTERY_VOLTAGE_ID}"] = serialized(value_buffer, value_len);
+          value_len = value_accuracy_to_buf(value_buffer, id(soil_temperature_v_internal).state, ${SOIL_TEMPERATURE_VOLTAGE_PRECISION});
+          root["${SOIL_TEMPERATURE_VOLTAGE_ID}"] = serialized(value_buffer, value_len);
+          value_len = value_accuracy_to_buf(value_buffer, id(soil_volumetric_water_v_internal).state, ${SOIL_VWC_VOLTAGE_PRECISION});
+          root["${SOIL_VWC_VOLTAGE_ID}"] = serialized(value_buffer, value_len);
         }
-        root["${DEEP_SLEEP_DURATION_ID}"] = sensasoil::rounded_float_to_string(id(deep_sleep_duration_internal).state, ${DEEP_SLEEP_DURATION_PRECISION});
-        root["${BATTERY_LEVEL_ID}"] = sensasoil::rounded_float_to_string(id(battery_level_internal).state, ${BATTERY_LEVEL_PRECISION});
-        root["${AMBIENT_TEMPERATURE_ID}"] = sensasoil::rounded_float_to_string(id(ambient_temperature_internal).state, ${AMBIENT_TEMPERATURE_PRECISION});
-        root["${AMBIENT_HUMIDITY_ID}"] = sensasoil::rounded_float_to_string(id(ambient_humidity_internal).state, ${AMBIENT_HUMIDITY_PRECISION});
-        root["${SOIL_TEMPERATURE_ID}"] = sensasoil::rounded_float_to_string(id(soil_temperature_internal).state, ${SOIL_TEMPERATURE_PRECISION});
-        root["${SOIL_VWC_ID}"] = sensasoil::rounded_float_to_string(id(soil_volumetric_water_internal).state, ${SOIL_VWC_PRECISION});
-        root["${BATTERY_CHARGING_ID}"] = id(is_battery_charging_internal).state ? "1" : "0";
+        value_len = value_accuracy_to_buf(value_buffer, id(deep_sleep_duration_internal).state, ${DEEP_SLEEP_DURATION_PRECISION});
+        root["${DEEP_SLEEP_DURATION_ID}"] = serialized(value_buffer, value_len);
+        value_len = value_accuracy_to_buf(value_buffer, id(battery_level_internal).state, ${BATTERY_LEVEL_PRECISION});
+        root["${BATTERY_LEVEL_ID}"] = serialized(value_buffer, value_len);
+        value_len = value_accuracy_to_buf(value_buffer, id(ambient_temperature_internal).state, ${AMBIENT_TEMPERATURE_PRECISION});
+        root["${AMBIENT_TEMPERATURE_ID}"] = serialized(value_buffer, value_len);
+        value_len = value_accuracy_to_buf(value_buffer, id(ambient_humidity_internal).state, ${AMBIENT_HUMIDITY_PRECISION});
+        root["${AMBIENT_HUMIDITY_ID}"] = serialized(value_buffer, value_len);
+        value_len = value_accuracy_to_buf(value_buffer, id(soil_temperature_internal).state, ${SOIL_TEMPERATURE_PRECISION});
+        root["${SOIL_TEMPERATURE_ID}"] = serialized(value_buffer, value_len);
+        value_len = value_accuracy_to_buf(value_buffer, id(soil_volumetric_water_internal).state, ${SOIL_VWC_PRECISION});
+        root["${SOIL_VWC_ID}"] = serialized(value_buffer, value_len);
+        root["${BATTERY_CHARGING_ID}"] = serialized(id(is_battery_charging_internal).state ? "1" : "0");
         root["${ERROR_STATE_ID}"] = id(error_state_internal).state;
 
         // Serialize the object into a buffer
@@ -419,8 +432,8 @@ script:
           sensor["p"] = "binary_sensor";
           sensor[MQTT_NAME] = "Battery charging";
           sensor[MQTT_DEVICE_CLASS] = "battery_charging";
-          sensor[MQTT_PAYLOAD_ON] = "1";
-          sensor[MQTT_PAYLOAD_OFF] = "0";
+          sensor[MQTT_PAYLOAD_ON] = 1;
+          sensor[MQTT_PAYLOAD_OFF] = 0;
           sensor[MQTT_VALUE_TEMPLATE] = "{{ value_json.${BATTERY_CHARGING_ID} }}";
 
           // Error state
