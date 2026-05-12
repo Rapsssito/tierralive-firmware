@@ -15,3 +15,11 @@ substitutions:
   HARDWARE_VERSION: "3.0"
   HARDWARE_VERSION_FLAT: "3-0"
   FIRMWARE_VERSION: !env_var FIRMWARE_VERSION
+
+script:
+  - id: setup_battery
+    parameters:
+      force_apply: bool
+    then:
+      - lambda: |-
+          // This is a no-op in v3.0

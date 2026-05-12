@@ -12,14 +12,6 @@ esp32:
   framework:
     type: esp-idf
 
-esphome:
-  on_boot:
-    - priority: -100
-      then:
-        - script.execute:
-            id: setup_charger
-            force_apply: false
-
 i2c:
   - id: i2c_bus
     sda: GPIO11
@@ -52,7 +44,7 @@ bq25186:
   mask_pg_interrupt: true
 
 script:
-  - id: setup_charger
+  - id: setup_battery
     mode: restart
     parameters:
       force_apply: bool
@@ -60,7 +52,7 @@ script:
       - lambda: |-
           // Do not apply the configuration unless manual_reset, initial connection or force is true
           if (!(id(manual_reset) || id(mqtt_initial_connection_setup) || force_apply)) {
-            id(setup_charger)->stop();
+            id(setup_battery)->stop();
             return;
           }
       - if:
@@ -70,7 +62,7 @@ script:
             - bq25186.apply_configuration: 
                 id: bq25186_charger
                 battery_regulation_voltage: 3800
-            - script.stop: setup_charger
+            - script.stop: setup_battery
       - if:
           condition:
             lambda: 'return id(battery_floating_mode) == sensasoil::BatteryFloatingMode::BALANCED;'
@@ -78,7 +70,7 @@ script:
             - bq25186.apply_configuration: 
                 id: bq25186_charger
                 battery_regulation_voltage: 4000
-            - script.stop: setup_charger
+            - script.stop: setup_battery
       - if:
           condition:
             lambda: 'return id(battery_floating_mode) == sensasoil::BatteryFloatingMode::MAX_CAPACITY;'
@@ -86,4 +78,4 @@ script:
             - bq25186.apply_configuration: 
                 id: bq25186_charger
                 battery_regulation_voltage: 4200
-            - script.stop: setup_charger
+            - script.stop: setup_battery

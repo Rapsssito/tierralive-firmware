@@ -267,6 +267,7 @@ esp32_ble_server:
                               default:
                                 ESP_LOGW("ExtendedImprov", "Unknown battery settings mode received: %d", mode);
                             }
+                            id(setup_battery)->execute(true);
                             break;
                           }
                           case sensasoil::ExtendedImprovCommand::REFRESH_SENSORS:

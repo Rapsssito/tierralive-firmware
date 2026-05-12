@@ -127,13 +127,13 @@ script:
       - delay: !lambda |-
           const unsigned long elapsed = millis() - id(power_sensors_time);
           return elapsed < 80 ? 80 - elapsed : 0;
-      - component.update: soil_volumetric_water_v
+      - component.update: soil_volumetric_water_v_internal
       - delay: 1ms # yield
       # Wait (hardware dependent delay)
       - delay: !lambda |-
           const unsigned long elapsed = millis() - id(power_sensors_time);
           return elapsed < 100 ? 100 - elapsed : 0;
-      - component.update: soil_temperature_v
+      - component.update: soil_temperature_v_internal
       - delay: 1ms # yield
       # Wait (hardware dependent delay)
       - delay: !lambda |-
