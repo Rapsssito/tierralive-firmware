@@ -35,8 +35,8 @@ sensor:
               case sensasoil::BatteryFloatingMode::MAX_CAPACITY:
                 return MAX(0.0f, MIN(x, 100.0f));
               case sensasoil::BatteryFloatingMode::MAX_LIFESPAN:
-                // In MAX_LIFESPAN mode, the battery level is capped at 60%, interpolate linearly
-                return MAX(0.0f, MIN(x * (100.0f / 60.0f), 100.0f));
+                // In MAX_LIFESPAN mode, the battery level is capped at 50%, interpolate linearly
+                return MAX(0.0f, MIN(x * (100.0f / 50.0f), 100.0f));
               case sensasoil::BatteryFloatingMode::BALANCED:
                 // In BALANCED mode, the battery level is capped at 80%, interpolate linearly
                 return MAX(0.0f, MIN(x * (100.0f / 80.0f), 100.0f));
@@ -56,14 +56,18 @@ sensor:
       internal: true
   - platform: adc
     id: soil_temperature_v_internal
-    pin: GPIO4
+    pin:
+      number: GPIO4
+      ignore_strapping_warning: true
     attenuation: 12db
     samples: 64
     internal: true
     update_interval: never
   - platform: adc
     id: soil_volumetric_water_v_internal
-    pin: GPIO5
+    pin:
+      number: GPIO5
+      ignore_strapping_warning: true
     attenuation: 12db
     samples: 64
     internal: true
@@ -80,13 +84,7 @@ binary_sensor:
         then:
           # Turn off the red LED when charging is done, turn on otherwise
           - lambda: |-
-              if (x && id(pg_gpo_switch).state) {
-                id(pg_gpo_switch)->turn_off();
-                return;
-              }
-              if (!x && !id(pg_gpo_switch).state) {
-                id(pg_gpo_switch)->turn_on();
-              }
+              id(pg_gpo_switch)->control(!x);
     charging:
       id: is_battery_charging_internal
       internal: true

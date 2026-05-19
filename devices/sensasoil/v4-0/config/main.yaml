@@ -26,14 +26,13 @@ bq25186:
   id: bq25186_charger
   configure_on_boot: false
   update_interval: never
-  fast_charge_current: 500
+  fast_charge_current: 500  # USB 2.0 limit
   termination_percent: 5%
-  battery_regulation_voltage: 4000  # By default, reduce strain on the battery by floating it at 4.0V instead of 4.2V
   watchdog: disabled
   vindpm_mode: battery_tracking
   battery_ocp_limit: 1500ma
   safety_timer: disabled
-  input_current_limit: 665ma
+  input_current_limit: 500ma  # USB 2.0 limit
   enable_push_button: false
   system_regulation: pass_through
   mask_charge_status_interrupt: true
@@ -59,23 +58,23 @@ script:
           condition:
             lambda: 'return id(battery_floating_mode) == sensasoil::BatteryFloatingMode::MAX_LIFESPAN;'
           then:
-            - bq25186.apply_configuration: 
+            - bq25186.apply_configuration:
                 id: bq25186_charger
-                battery_regulation_voltage: 3800
+                battery_regulation_voltage: 3850 # 50% capacity / 6,000 - 10,000+ cycles
             - script.stop: setup_battery
       - if:
           condition:
             lambda: 'return id(battery_floating_mode) == sensasoil::BatteryFloatingMode::BALANCED;'
           then:
-            - bq25186.apply_configuration: 
+            - bq25186.apply_configuration:
                 id: bq25186_charger
-                battery_regulation_voltage: 4000
+                battery_regulation_voltage: 4040 # 80% capacity / 1,200 - 2,000 cycles
             - script.stop: setup_battery
       - if:
           condition:
             lambda: 'return id(battery_floating_mode) == sensasoil::BatteryFloatingMode::MAX_CAPACITY;'
           then:
-            - bq25186.apply_configuration: 
+            - bq25186.apply_configuration:
                 id: bq25186_charger
-                battery_regulation_voltage: 4200
+                battery_regulation_voltage: 4200 # 100% capacity / 300 - 500 cycles
             - script.stop: setup_battery

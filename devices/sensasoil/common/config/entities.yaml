@@ -231,7 +231,11 @@ script:
         value_len = value_accuracy_to_buf(value_buffer, id(soil_volumetric_water_internal).state, ${SOIL_VWC_PRECISION});
         root["${SOIL_VWC_ID}"] = serialized(value_buffer, value_len);
         root["${BATTERY_CHARGING_ID}"] = serialized(id(is_battery_charging_internal).state ? "1" : "0");
-        root["${ERROR_STATE_ID}"] = id(error_state_internal).state;
+        if (id(error_state_internal).state == "0") {
+          root["${ERROR_STATE_ID}"] = 0; // Skip quotes to reduce payload size when no error, which is the common case
+        } else {
+          root["${ERROR_STATE_ID}"] = id(error_state_internal).state;
+        }
 
         // Serialize the object into a buffer
         auto json_buffer = builder.serialize();

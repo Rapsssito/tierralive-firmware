@@ -49,9 +49,9 @@ enum class SoilProbeVersion : uint8_t { V3, V4, V5 };
  * @brief Battery capacity / lifespan floating mode
  */
 enum class BatteryFloatingMode : uint8_t {
-  MAX_LIFESPAN = 0, // Floating at 3.8V -> 60% capacity / 6,000 – 10,000+ cycles
-  BALANCED = 1,     // Floating at 4.0V -> 80% capacity / 1,200 - 2,000 cycles
-  MAX_CAPACITY = 2  // Floating at 4.2V -> 100% capacity / 300 - 500 cycles
+  MAX_LIFESPAN = 0,
+  BALANCED = 1,
+  MAX_CAPACITY = 2
 };
 
 /**
@@ -116,7 +116,8 @@ inline size_t encode_base64url(const uint8_t *bytes, size_t length, char *out) {
   return out_idx;
 }
 
-inline std::string encode_base64url(const uint8_t *bytes, size_t length, size_t max_output_length) {
+inline std::string encode_base64url(const uint8_t *bytes, size_t length,
+                                    size_t max_output_length) {
   char buffer[max_output_length];
   const size_t encoded_length = encode_base64url(bytes, length, buffer);
   return std::string(buffer, encoded_length);
@@ -274,7 +275,7 @@ const float compute_soil_vwc(const float voltage, const float temperature,
   case SoilProbeVersion::V4:
   case SoilProbeVersion::V5: {
     // Compensate the voltage based on temperature
-    const float TEMP_COEFFICIENT = -0.0025f;
+    const float TEMP_COEFFICIENT = -0.00518582f;
     float x_true =
         !std::isnan(temperature)
             ? voltage + TEMP_COEFFICIENT * (temperature - CALIBRATED_TEMP)
