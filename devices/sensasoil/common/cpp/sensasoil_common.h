@@ -275,7 +275,7 @@ const float compute_soil_vwc(const float voltage, const float temperature,
   case SoilProbeVersion::V4:
   case SoilProbeVersion::V5: {
     // Compensate the voltage based on temperature
-    const float TEMP_COEFFICIENT = -0.00518582f;
+    const float TEMP_COEFFICIENT = -0.0025f;
     float x_true =
         !std::isnan(temperature)
             ? voltage + TEMP_COEFFICIENT * (temperature - CALIBRATED_TEMP)

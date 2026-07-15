@@ -38,6 +38,7 @@ esp32_ble:
   id: ble_id
   enable_on_boot: False
   max_connections: 1
+  # TODO: Test auth_req_mode: sc_mitm
 
 esp32_ble_server:
   id: ble_server
@@ -293,6 +294,7 @@ esp32_ble_server:
                             id(soil_probe_calibration_temperature) = calibration_temp;
                             id(soil_probe_calibration_max_voltage) = max_voltage;
                             id(soil_probe_calibration_min_voltage) = min_voltage;
+                            id(improv_read_sensors)->execute();
                             break;
                           }
                           default:
@@ -545,6 +547,10 @@ script:
 
   - id: improv_read_sensors
     then:
+      # We have BLE enabled, which can cause interference with the ADC readings,
+      # so we wait a bit to let it stabilize
+      # TODO: Check optimal delay
+      - delay: 500ms
       - script.execute: read_sensors
       - script.wait: read_sensors
       # Update BLE info characteristic with the new sensor readings
@@ -552,3 +558,5 @@ script:
           id: ble_battery_status_char
       - ble_server.characteristic.notify:
           id: ble_sensasoil_info_char
+      - ble_server.characteristic.notify:
+          id: ble_battery_level_char

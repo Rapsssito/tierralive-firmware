@@ -10,6 +10,9 @@ globals:
     restore_value: no
     initial_value: "0"
 
+substitutions:
+  ADC_SAMPLES: "5"
+
 sensor:
   - platform: dht
     pin: GPIO5
@@ -26,11 +29,15 @@ sensor:
     id: battery_voltage_internal
     pin: GPIO3
     attenuation: 12db
-    samples: 64
+    samples: 32
     filters:
     - calibrate_linear:
           - 1.91 -> 3.3
           - 2.40 -> 4.2
+    - median:
+        window_size: ${ADC_SAMPLES}
+        send_every: ${ADC_SAMPLES}
+        send_first_at: ${ADC_SAMPLES}
     update_interval: never
     internal: true
   - platform: template
@@ -49,14 +56,24 @@ sensor:
   - platform: adc
     id: soil_temperature_v_internal
     attenuation: 12db
-    samples: 64
+    samples: 32
     pin: GPIO1
     update_interval: never
     internal: true
+    filters:
+      - median:
+          window_size: ${ADC_SAMPLES}
+          send_every: ${ADC_SAMPLES}
+          send_first_at: ${ADC_SAMPLES}
   - platform: adc
     id: soil_volumetric_water_v_internal
     attenuation: 12db
-    samples: 64
+    samples: 32
+    filters:
+      - median:
+          window_size: ${ADC_SAMPLES}
+          send_every: ${ADC_SAMPLES}
+          send_first_at: ${ADC_SAMPLES}
     pin: GPIO4
     update_interval: never
     internal: true
@@ -114,7 +131,11 @@ script:
     mode: restart
     then:
       # Battery charging is automatically updated by the GPIO
-      - component.update: battery_voltage_internal
+      - repeat:
+          count: ${ADC_SAMPLES}
+          then:
+          - component.update: battery_voltage_internal
+          - delay: 1ms # yield
       - component.update: battery_level_internal
       # Update peripherals voltage sensors
       # Turn on peripheral power if not already
@@ -127,14 +148,20 @@ script:
       - delay: !lambda |-
           const unsigned long elapsed = millis() - id(power_sensors_time);
           return elapsed < 80 ? 80 - elapsed : 0;
-      - component.update: soil_volumetric_water_v_internal
-      - delay: 1ms # yield
+      - repeat:
+          count: ${ADC_SAMPLES}
+          then:
+          - component.update: soil_volumetric_water_v_internal
+          - delay: 1ms # yield
       # Wait (hardware dependent delay)
       - delay: !lambda |-
           const unsigned long elapsed = millis() - id(power_sensors_time);
           return elapsed < 100 ? 100 - elapsed : 0;
-      - component.update: soil_temperature_v_internal
-      - delay: 1ms # yield
+      - repeat:
+          count: ${ADC_SAMPLES}
+          then:
+          - component.update: soil_temperature_v_internal
+          - delay: 1ms # yield
       # Wait (hardware dependent delay)
       - delay: !lambda |-
           const unsigned long elapsed = millis() - id(power_sensors_time);

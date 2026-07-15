@@ -6,6 +6,9 @@ external_components:
     components: [bq25186]
     refresh: 1h
 
+substitutions:
+  ADC_SAMPLES: "5"
+
 globals:
   - id: soil_probe_version
     type: sensasoil::SoilProbeVersion
@@ -60,18 +63,28 @@ sensor:
       number: GPIO4
       ignore_strapping_warning: true
     attenuation: 12db
-    samples: 64
+    samples: 32
     internal: true
     update_interval: never
+    filters:
+      - median:
+          window_size: ${ADC_SAMPLES}
+          send_every: ${ADC_SAMPLES}
+          send_first_at: ${ADC_SAMPLES}
   - platform: adc
     id: soil_volumetric_water_v_internal
     pin:
       number: GPIO5
       ignore_strapping_warning: true
     attenuation: 12db
-    samples: 64
+    samples: 32
     internal: true
     update_interval: never
+    filters:
+      - median:
+          window_size: ${ADC_SAMPLES}
+          send_every: ${ADC_SAMPLES}
+          send_first_at: ${ADC_SAMPLES}
 
 binary_sensor:
   - platform: bq25186
@@ -154,13 +167,19 @@ script:
       - delay: !lambda |-
           const unsigned long elapsed = millis() - id(power_sensors_time);
           return elapsed < 80 ? 80 - elapsed : 0;
-      - component.update: soil_volumetric_water_v_internal
-      - delay: 1ms # yield
+      - repeat:
+          count: ${ADC_SAMPLES}
+          then:
+          - component.update: soil_volumetric_water_v_internal
+          - delay: 1ms
       # Wait (hardware dependent delay)
       - delay: !lambda |-
           const unsigned long elapsed = millis() - id(power_sensors_time);
           return elapsed < 100 ? 100 - elapsed : 0;
-      # Update peripherals voltage sensors
-      - component.update: soil_temperature_v_internal
+      - repeat:
+          count: ${ADC_SAMPLES}
+          then:
+          - component.update: soil_temperature_v_internal
+          - delay: 1ms
       # Turn off peripheral power
       - switch.turn_off: power_sensors

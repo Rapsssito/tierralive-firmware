@@ -40,6 +40,8 @@ ota:
     on_end:
       - lambda: |-
           id(mqtt_initial_connection_setup) = true;
+      # Long delay to stabilize the VCC after the OTA for later reading ADC sensors
+      - delay: 15s
     on_error:
       - lambda: |-
           id(last_exec_error) = sensasoil::ErrorCode::OTA;
