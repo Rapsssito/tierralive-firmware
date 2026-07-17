@@ -360,7 +360,7 @@ script:
             // Disconnect from MQTT broker will be performed thanks to the short keepalive
             if(memcmp(id(current_update_id), id(received_update_id), sizeof(id(current_update_id))) == 0) {
               // Everything went fine, go to deep sleep
-              id(send_to_deep_sleep)->execute(0, id(deep_sleep_duration_internal).state * 60 * 1000);
+              id(send_to_deep_sleep)->execute(0, id(deep_sleep_duration).state * 60 * 1000);
             } else {
               ESP_LOGE("deep_sleep_wait_mqtt", "MQTT timeout waiting for update ID to be received. current_update_id: %u, received_update_id: %u", id(current_update_id), id(received_update_id));
               id(last_exec_error) = sensasoil::ErrorCode::MQTT_ACK_TIMEOUT;

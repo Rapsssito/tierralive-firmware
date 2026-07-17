@@ -20,13 +20,13 @@ sensor:
     id: temperature_humidity_sensor
     update_interval: never
     temperature:
-      id: ambient_temperature_internal
+      id: ambient_temperature
       internal: true
     humidity:
-      id: ambient_humidity_internal
+      id: ambient_humidity
       internal: true
   - platform: adc
-    id: battery_voltage_internal
+    id: battery_voltage
     pin: GPIO3
     attenuation: 12db
     samples: 32
@@ -41,9 +41,9 @@ sensor:
     update_interval: never
     internal: true
   - platform: template
-    id: battery_level_internal
+    id: battery_level
     lambda: !lambda |-
-      const float battery = id(battery_voltage_internal).state;
+      const float battery = id(battery_voltage).state;
       if (battery <= 3.3f) {
         return 0.0f;
       }
@@ -54,7 +54,7 @@ sensor:
     update_interval: never
     internal: true
   - platform: adc
-    id: soil_temperature_v_internal
+    id: soil_temperature_v
     attenuation: 12db
     samples: 32
     pin: GPIO1
@@ -66,7 +66,7 @@ sensor:
           send_every: ${ADC_SAMPLES}
           send_first_at: ${ADC_SAMPLES}
   - platform: adc
-    id: soil_volumetric_water_v_internal
+    id: soil_volumetric_water_v
     attenuation: 12db
     samples: 32
     filters:
@@ -80,7 +80,7 @@ sensor:
 
 binary_sensor:
   - platform: gpio
-    id: is_battery_charging_internal
+    id: is_battery_charging
     trigger_on_initial_state: true
     use_interrupt: true
     pin:
@@ -90,8 +90,16 @@ binary_sensor:
         pullup: True
       inverted: True
     internal: True
+  - platform: template
+    id: is_solar_charging  # Unused, but kept for compatibility with newer hardware versions
+    internal: true
+    trigger_on_initial_state: true
+  - platform: template
+    id: is_plugged_in_charging  # Unused, but kept for compatibility with newer hardware versions
+    internal: true
+    trigger_on_initial_state: true
   - platform: gpio
-    id: factory_reset_internal_button
+    id: factory_reset_gpio_button
     trigger_on_initial_state: true
     use_interrupt: True
     pin:
@@ -111,7 +119,7 @@ binary_sensor:
 
 output:
   - platform: ledc
-    id: led_status_output_internal
+    id: led_status_output
     pin: GPIO0
 
 switch:
@@ -134,9 +142,9 @@ script:
       - repeat:
           count: ${ADC_SAMPLES}
           then:
-          - component.update: battery_voltage_internal
+          - component.update: battery_voltage
           - delay: 1ms # yield
-      - component.update: battery_level_internal
+      - component.update: battery_level
       # Update peripherals voltage sensors
       # Turn on peripheral power if not already
       - lambda: |-
@@ -151,7 +159,7 @@ script:
       - repeat:
           count: ${ADC_SAMPLES}
           then:
-          - component.update: soil_volumetric_water_v_internal
+          - component.update: soil_volumetric_water_v
           - delay: 1ms # yield
       # Wait (hardware dependent delay)
       - delay: !lambda |-
@@ -160,7 +168,7 @@ script:
       - repeat:
           count: ${ADC_SAMPLES}
           then:
-          - component.update: soil_temperature_v_internal
+          - component.update: soil_temperature_v
           - delay: 1ms # yield
       # Wait (hardware dependent delay)
       - delay: !lambda |-

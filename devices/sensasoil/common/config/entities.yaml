@@ -59,21 +59,21 @@ globals:
 sensor:
   - platform: wifi_signal
     name: "WiFi signal"
-    id: wifi_signal_db_internal
+    id: wifi_signal_db
     update_interval: never
     internal: true
   - platform: internal_temperature
-    id: chip_temperature_internal
+    id: chip_temperature
     internal: true
     update_interval: never
   - platform: template
-    id: deep_sleep_duration_internal
+    id: deep_sleep_duration
     internal: true
     update_interval: never
     lambda: |-
         const float max_sleep_minutes = ${SENSASOIL_SLEEP_MAX_MINUTES};
         const float min_sleep_minutes = ${SENSASOIL_SLEEP_MIN_MINUTES};
-        float battery = id(battery_level_internal).state;
+        float battery = id(battery_level).state;
         if (isnan(battery)) {
           return max_sleep_minutes;
         }
@@ -86,21 +86,21 @@ sensor:
 
         return max_sleep_minutes - ((max_sleep_minutes - min_sleep_minutes) * (battery / 100.0f));
   - platform: template
-    id: soil_temperature_internal
+    id: soil_temperature
     internal: true
     update_interval: never
     lambda: |-
-      return sensasoil::compute_soil_temperature(id(soil_temperature_v_internal).state, id(soil_probe_version));
+      return sensasoil::compute_soil_temperature(id(soil_temperature_v).state, id(soil_probe_version));
   - platform: template
-    id: soil_volumetric_water_internal
+    id: soil_volumetric_water
     internal: true
     update_interval: never
     lambda: |-
-      return sensasoil::compute_soil_vwc(id(soil_volumetric_water_v_internal).state, id(soil_temperature_internal).state, id(soil_probe_calibration_temperature), id(soil_probe_calibration_min_voltage), id(soil_probe_calibration_max_voltage), id(soil_probe_version));
+      return sensasoil::compute_soil_vwc(id(soil_volumetric_water_v).state, id(soil_temperature).state, id(soil_probe_calibration_temperature), id(soil_probe_calibration_min_voltage), id(soil_probe_calibration_max_voltage), id(soil_probe_version));
 
 text_sensor:
   - platform: template
-    id: error_state_internal
+    id: error_state
     internal: true
     update_interval: never
     lambda: |-
@@ -143,7 +143,7 @@ light:
   - platform: monochromatic
     id: led_status
     name: "Status LED"
-    output: led_status_output_internal  # Must be defined by the device configuration
+    output: led_status_output  # Must be defined by the device configuration
     restore_mode: ALWAYS_OFF
     effects:
       - pulse:
@@ -187,13 +187,13 @@ script:
       - script.execute: read_sensors_specific
       - script.wait: read_sensors_specific
       # Update template sensors based on the voltage
-      - component.update: soil_temperature_internal
-      - component.update: soil_volumetric_water_internal
+      - component.update: soil_temperature
+      - component.update: soil_volumetric_water
       # Rest of internal sensors
-      - component.update: deep_sleep_duration_internal
-      - component.update: wifi_signal_db_internal
-      - component.update: chip_temperature_internal
-      - component.update: error_state_internal
+      - component.update: deep_sleep_duration
+      - component.update: wifi_signal_db
+      - component.update: chip_temperature
+      - component.update: error_state
 
   - id: publish_sensors
     mode: restart
@@ -207,34 +207,34 @@ script:
         static char value_buffer[VALUE_ACCURACY_MAX_LEN];
         size_t value_len;
         if (id(diagnostic_mode)) {
-          value_len = value_accuracy_to_buf(value_buffer, id(chip_temperature_internal).state, ${CHIP_TEMPERATURE_PRECISION});
+          value_len = value_accuracy_to_buf(value_buffer, id(chip_temperature).state, ${CHIP_TEMPERATURE_PRECISION});
           root["${CHIP_TEMPERATURE_ID}"] = serialized(value_buffer, value_len);
-          value_len = value_accuracy_to_buf(value_buffer, id(wifi_signal_db_internal).state, ${NETWORK_SIGNAL_PRECISION});
+          value_len = value_accuracy_to_buf(value_buffer, id(wifi_signal_db).state, ${NETWORK_SIGNAL_PRECISION});
           root["${NETWORK_SIGNAL_ID}"] = serialized(value_buffer, value_len);
-          value_len = value_accuracy_to_buf(value_buffer, id(battery_voltage_internal).state, ${BATTERY_VOLTAGE_PRECISION});
+          value_len = value_accuracy_to_buf(value_buffer, id(battery_voltage).state, ${BATTERY_VOLTAGE_PRECISION});
           root["${BATTERY_VOLTAGE_ID}"] = serialized(value_buffer, value_len);
-          value_len = value_accuracy_to_buf(value_buffer, id(soil_temperature_v_internal).state, ${SOIL_TEMPERATURE_VOLTAGE_PRECISION});
+          value_len = value_accuracy_to_buf(value_buffer, id(soil_temperature_v).state, ${SOIL_TEMPERATURE_VOLTAGE_PRECISION});
           root["${SOIL_TEMPERATURE_VOLTAGE_ID}"] = serialized(value_buffer, value_len);
-          value_len = value_accuracy_to_buf(value_buffer, id(soil_volumetric_water_v_internal).state, ${SOIL_VWC_VOLTAGE_PRECISION});
+          value_len = value_accuracy_to_buf(value_buffer, id(soil_volumetric_water_v).state, ${SOIL_VWC_VOLTAGE_PRECISION});
           root["${SOIL_VWC_VOLTAGE_ID}"] = serialized(value_buffer, value_len);
         }
-        value_len = value_accuracy_to_buf(value_buffer, id(deep_sleep_duration_internal).state, ${DEEP_SLEEP_DURATION_PRECISION});
+        value_len = value_accuracy_to_buf(value_buffer, id(deep_sleep_duration).state, ${DEEP_SLEEP_DURATION_PRECISION});
         root["${DEEP_SLEEP_DURATION_ID}"] = serialized(value_buffer, value_len);
-        value_len = value_accuracy_to_buf(value_buffer, id(battery_level_internal).state, ${BATTERY_LEVEL_PRECISION});
+        value_len = value_accuracy_to_buf(value_buffer, id(battery_level).state, ${BATTERY_LEVEL_PRECISION});
         root["${BATTERY_LEVEL_ID}"] = serialized(value_buffer, value_len);
-        value_len = value_accuracy_to_buf(value_buffer, id(ambient_temperature_internal).state, ${AMBIENT_TEMPERATURE_PRECISION});
+        value_len = value_accuracy_to_buf(value_buffer, id(ambient_temperature).state, ${AMBIENT_TEMPERATURE_PRECISION});
         root["${AMBIENT_TEMPERATURE_ID}"] = serialized(value_buffer, value_len);
-        value_len = value_accuracy_to_buf(value_buffer, id(ambient_humidity_internal).state, ${AMBIENT_HUMIDITY_PRECISION});
+        value_len = value_accuracy_to_buf(value_buffer, id(ambient_humidity).state, ${AMBIENT_HUMIDITY_PRECISION});
         root["${AMBIENT_HUMIDITY_ID}"] = serialized(value_buffer, value_len);
-        value_len = value_accuracy_to_buf(value_buffer, id(soil_temperature_internal).state, ${SOIL_TEMPERATURE_PRECISION});
+        value_len = value_accuracy_to_buf(value_buffer, id(soil_temperature).state, ${SOIL_TEMPERATURE_PRECISION});
         root["${SOIL_TEMPERATURE_ID}"] = serialized(value_buffer, value_len);
-        value_len = value_accuracy_to_buf(value_buffer, id(soil_volumetric_water_internal).state, ${SOIL_VWC_PRECISION});
+        value_len = value_accuracy_to_buf(value_buffer, id(soil_volumetric_water).state, ${SOIL_VWC_PRECISION});
         root["${SOIL_VWC_ID}"] = serialized(value_buffer, value_len);
-        root["${BATTERY_CHARGING_ID}"] = serialized(id(is_battery_charging_internal).state ? "1" : "0");
-        if (id(error_state_internal).state == "0") {
+        root["${BATTERY_CHARGING_ID}"] = serialized(id(is_battery_charging).state ? "1" : "0");
+        if (id(error_state).state == "0") {
           root["${ERROR_STATE_ID}"] = 0; // Skip quotes to reduce payload size when no error, which is the common case
         } else {
-          root["${ERROR_STATE_ID}"] = id(error_state_internal).state;
+          root["${ERROR_STATE_ID}"] = id(error_state).state;
         }
 
         // Serialize the object into a buffer

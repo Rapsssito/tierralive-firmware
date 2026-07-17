@@ -27,10 +27,10 @@ sensor:
     address: 0x36
     update_interval: never
     battery_voltage:
-      id: battery_voltage_internal
+      id: battery_voltage
       internal: true
     battery_level:
-      id: battery_level_internal
+      id: battery_level
       internal: true
       filters:
         - lambda: |-
@@ -52,13 +52,13 @@ sensor:
     power_mode: ULTRA_LOW_POWER
     update_interval: never
     temperature:
-      id: ambient_temperature_internal
+      id: ambient_temperature
       internal: true
     humidity:
-      id: ambient_humidity_internal
+      id: ambient_humidity
       internal: true
   - platform: adc
-    id: soil_temperature_v_internal
+    id: soil_temperature_v
     pin:
       number: GPIO4
       ignore_strapping_warning: true
@@ -72,7 +72,7 @@ sensor:
           send_every: ${ADC_SAMPLES}
           send_first_at: ${ADC_SAMPLES}
   - platform: adc
-    id: soil_volumetric_water_v_internal
+    id: soil_volumetric_water_v
     pin:
       number: GPIO5
       ignore_strapping_warning: true
@@ -90,7 +90,7 @@ binary_sensor:
   - platform: bq25186
     bq25186_id: bq25186_charger
     charge_done:
-      id: is_charging_done_internal
+      id: is_charging_done
       internal: true
       trigger_on_initial_state: true
       on_state:
@@ -98,12 +98,21 @@ binary_sensor:
           # Turn off the red LED when charging is done, turn on otherwise
           - lambda: |-
               id(pg_gpo_switch)->control(!x);
-    charging:
-      id: is_battery_charging_internal
+    power_good:
+      id: is_power_good
       internal: true
       trigger_on_initial_state: true
+    vindpm:
+      id: is_vindpm
+      internal: true
+      trigger_on_initial_state: true
+    # NOT IN USE, REQUIRES TOO MUCH mA CURRENT, SO IT'S NOT RELIABLE
+    # charging:
+    #   id: is_battery_charging
+    #   internal: true
+    #   trigger_on_initial_state: true
   - platform: gpio
-    id: factory_reset_internal_button
+    id: factory_reset_gpio_button
     use_interrupt: True
     trigger_on_initial_state: true
     pin:
@@ -120,10 +129,22 @@ binary_sensor:
     on_press:
       then:
         - button.press: factory_reset_button
+  - platform: template
+    id: is_battery_charging
+    internal: true
+    trigger_on_initial_state: true
+  - platform: template
+    id: is_solar_charging
+    internal: true
+    trigger_on_initial_state: true
+  - platform: template
+    id: is_plugged_in_charging
+    internal: true
+    trigger_on_initial_state: true
 
 output:
   - platform: ledc
-    id: led_status_output_internal
+    id: led_status_output
     pin:
       number: GPIO15
       ignore_strapping_warning: true
@@ -161,6 +182,11 @@ script:
       - delay: 1ms # yield
       # Read some sensors to give some time for the peripherals to stabilize after powering them on
       - component.update: bq25186_charger
+      # Update the is charging state
+      - lambda: |-
+          id(is_solar_charging).publish_state(id(is_power_good).state && id(is_vindpm).state);
+          id(is_plugged_in_charging).publish_state(id(is_power_good).state && !id(is_vindpm).state);
+          id(is_battery_charging).publish_state(id(is_solar_charging).state || id(is_plugged_in_charging).state);
       - component.update: temperature_humidity_sensor
       - delay: 1ms # yield
       # Wait (hardware dependent delay)
@@ -170,7 +196,7 @@ script:
       - repeat:
           count: ${ADC_SAMPLES}
           then:
-          - component.update: soil_volumetric_water_v_internal
+          - component.update: soil_volumetric_water_v
           - delay: 1ms
       # Wait (hardware dependent delay)
       - delay: !lambda |-
@@ -179,7 +205,7 @@ script:
       - repeat:
           count: ${ADC_SAMPLES}
           then:
-          - component.update: soil_temperature_v_internal
+          - component.update: soil_temperature_v
           - delay: 1ms
       # Turn off peripheral power
       - switch.turn_off: power_sensors
