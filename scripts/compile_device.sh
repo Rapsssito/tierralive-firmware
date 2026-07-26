@@ -62,8 +62,8 @@ COMPILE_OUTPUT=$(FIRMWARE_VERSION="${FIRMWARE_VERSION}" "${ESPHOME_BIN}" compile
 	exit 1
 }
 
-OTA_BIN_PATH="${CONFIG_BASE}/.esphome/build/${DEVICE_NAME}/.pioenvs/${DEVICE_NAME}/firmware.ota.bin"
-FACTORY_BIN_PATH="${CONFIG_BASE}/.esphome/build/${DEVICE_NAME}/.pioenvs/${DEVICE_NAME}/firmware.factory.bin"
+OTA_BIN_PATH="${CONFIG_BASE}/.esphome/build/${DEVICE_NAME}/build/firmware.ota.bin"
+FACTORY_BIN_PATH="${CONFIG_BASE}/.esphome/build/${DEVICE_NAME}/build/firmware.factory.bin"
 OUTPUT_OTA_FIRMWARE_PATH="${OUTPUT_PREFIX}.ota.bin"
 OUTPUT_OTA_MD5_PATH="${OUTPUT_PREFIX}.ota.bin.md5"
 OUTPUT_FACTORY_FIRMWARE_PATH="${OUTPUT_PREFIX}.factory.bin"

@@ -151,7 +151,9 @@ wifi:
   post_connect_roaming: false
   ssid: "s"  # Configured by globals
   password: "pppppppp"  # Configured by globals
-  fast_connect: True
+  fast_connect:
+    enabled: true
+    storage: rtc
   on_disconnect:
     - script.execute: on_wifi_disconnect
 

@@ -2,6 +2,8 @@
 
 namespace sensasoil {
 
+RTC_DATA_ATTR uint8_t ota_check_count = 0;
+
 /**
  * @brief Device setup states for BLE provisioning flow
  */

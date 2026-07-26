@@ -2,15 +2,6 @@ substitutions:
   OTA_URL: "https://github.com/Rapsssito/tierralive-firmware/releases/download/@tierralive-firmware/sensasoil-v${HARDWARE_VERSION_FLAT}@latest"
   CHECK_OTA_INTERVAL: "250" # Number of boots between OTA checks
 
-globals:
-  - id: ota_check_count
-    type: uint8_t
-    # TODO: Enable when ESPHome supports it
-    # restore_value: RTC
-    restore_value: yes
-    update_interval: ${SAVE_TO_STORAGE_INTERNAL_INTERVAL}
-    initial_value: "0"
-
 http_request:
   verify_ssl: true
   useragent: SensaSoil_${HARDWARE_VERSION}/${FIRMWARE_VERSION}
@@ -24,7 +15,7 @@ safe_mode:
     - lambda: |-
         ESP_LOGW("safe_mode", "Safe mode triggered, forcing OTA check");
         // Bypass boot interval check while in safe mode.
-        id(ota_check_count) = ${CHECK_OTA_INTERVAL};
+        sensasoil::ota_check_count = ${CHECK_OTA_INTERVAL};
     - script.execute: check_ota
     - script.wait: check_ota
     # Give a few minutes for the OTA, so it will execute only if it fails
@@ -54,12 +45,12 @@ script:
     then:
       - lambda: |-
           // Only check for OTA every X wakeups
-          if (id(ota_check_count) < ${CHECK_OTA_INTERVAL}) {
-            id(ota_check_count)++;
+          if (sensasoil::ota_check_count < ${CHECK_OTA_INTERVAL}) {
+            sensasoil::ota_check_count++;
             id(check_ota)->stop();
             return;
           }
-          id(ota_check_count) = 0;
+          sensasoil::ota_check_count = 0;
       # Call HTTP request to check for new firmware version
       - http_request.get:
           url: "${OTA_URL}/sensasoil-v${HARDWARE_VERSION_FLAT}.version.txt"
